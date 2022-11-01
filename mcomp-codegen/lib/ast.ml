@@ -18,7 +18,6 @@ type binop =
 [@@deriving show, ord, eq]
 
 type uop = Neg | Not [@@deriving show, ord, eq]
-
 type identifier = string [@@deriving show, ord, eq]
 
 type typ =
@@ -96,13 +95,13 @@ and 'a member_decl_node =
   | VarDecl of vdecl
 [@@deriving show, ord, eq]
 
-and 'a interface_decl = ('a interface_decl_node, 'a) annotated_node 
+and 'a interface_decl = ('a interface_decl_node, 'a) annotated_node
 
 and 'a interface_decl_node =
   | InterfaceDecl of {
       (* Interface declaration *)
       iname : identifier;
-      declarations : 'a member_decl list;    
+      declarations : 'a member_decl list;
     }
 [@@deriving show, ord, eq]
 
@@ -137,15 +136,13 @@ type typed_compilation_unit = typ compilation_unit
 
 
 (* Extra type needed to keep track of all the top level declarations for Menhir *)
-type 'a top_decl = 
+type 'a top_decl =
   | Interface of 'a interface_decl
   | Component of 'a component_decl
   | Connection of connection list
 [@@deriving show, ord, eq]
 
-
 (* --- Helper functions --- *)
-
 
 (**
   Annotate a node with a given annotation.
@@ -153,8 +150,7 @@ type 'a top_decl =
   @param b The annotation to use.
   @return The annotated node.
 *)
-let annotate_node a b = {node=a; annot=b}
-
+let annotate_node a b = { node = a; annot = b }
 
 (**
   Check weather a type is a primitive type (e.g. int, bool, char)
@@ -169,9 +165,9 @@ let is_primitive = function
   @return True if the type is a scalar type, false otherwise.
 *)
 let rec is_scalar = function
-| TArray(_) -> true
-| TRef(typ) -> is_scalar typ
-| _ -> false
+  | TArray _ -> true
+  | TRef typ -> is_scalar typ
+  | _ -> false
 
 (**
   Check weather a binary operation is a math operation (e.g. +, -, *, /) 
@@ -186,8 +182,8 @@ let is_math_op = function
   @return True if the binary operation is a comparison operation, false otherwise.
 *)
 let is_comp_op = function
-| Equal | Neq | Less | Leq | Greater | Geq -> true
-| _ -> false
+  | Equal | Neq | Less | Leq | Greater | Geq -> true
+  | _ -> false
 
 (**
   Check weather a binary operation is a logical operation (e.g. &&, ||)
@@ -206,7 +202,7 @@ let is_bool_op = function
 *)
 let is_of_typ_or_reftyp oracle_typ to_check =
   match to_check with
-  | TRef(ttyp) -> equal_typ oracle_typ ttyp
+  | TRef ttyp -> equal_typ oracle_typ ttyp
   | _ -> equal_typ oracle_typ to_check
 
 (**
@@ -214,13 +210,13 @@ let is_of_typ_or_reftyp oracle_typ to_check =
   @return A string representation of the type.
 *)
 let rec show_typ = function
-| TInt -> "int"
-| TBool -> "bool"
-| TChar -> "char"
-| TArray (t, None) -> Printf.sprintf "%s[]" (show_typ t)
-| TArray (t, Some n) -> Printf.sprintf "%s[%d]" (show_typ t) n
-| TRef t -> Printf.sprintf "ref %s" (show_typ t)
-| TVoid -> "void"
-| TFun (args, ret) -> Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map show_typ args)) (show_typ ret)
-| TInterface i -> Printf.sprintf "interface %s" i
-| TComponent c -> Printf.sprintf "component %s" c
+  | TInt -> "int"
+  | TBool -> "bool"
+  | TChar -> "char"
+  | TArray (t, None) -> Printf.sprintf "%s[]" (show_typ t)
+  | TArray (t, Some n) -> Printf.sprintf "%s[%d]" (show_typ t) n
+  | TRef t -> Printf.sprintf "ref %s" (show_typ t)
+  | TVoid -> "void"
+  | TFun (args, ret) -> Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map show_typ args)) (show_typ ret)
+  | TInterface i -> Printf.sprintf "interface %s" i
+  | TComponent c -> Printf.sprintf "component %s" c
