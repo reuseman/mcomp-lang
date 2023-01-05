@@ -198,12 +198,12 @@ module Checker = struct
 end
 
 module Qualifier = struct
-  let rec visit_lvalue table lvalue =
+  let rec visit_lvalue current_cname table lvalue =
     match lvalue.node with
     | Ast.AccVar (None, _) -> lvalue
     | Ast.AccIndex (l, e) ->
-        let vl = visit_lvalue table l in
-        let ve = visit_expr table e in
+        let vl = visit_lvalue current_cname table l in
+        let ve = visit_expr current_cname table e in
         Ast.AccIndex (vl, ve) ++ lvalue.annot
     | Ast.AccVar (Some interface, id) ->
         (* Add qualifier *)
@@ -213,96 +213,96 @@ module Qualifier = struct
         in
         Ast.AccVar (Some component, id) ++ lvalue.annot
 
-  and visit_expr table expr =
+  and visit_expr current_cname table expr =
     let new_node =
       match expr.node with
       | Ast.LV lvalue ->
-          let vl = visit_lvalue table lvalue in
+          let vl = visit_lvalue current_cname table lvalue in
           Ast.LV vl
       | Ast.Assign (lvalue, expr) ->
-          let vl = visit_lvalue table lvalue in
-          let ve = visit_expr table expr in
+          let vl = visit_lvalue current_cname table lvalue in
+          let ve = visit_expr current_cname table expr in
           Ast.Assign (vl, ve)
       | Ast.ILiteral _ -> expr.node
       | Ast.CLiteral _ -> expr.node
       | Ast.BLiteral _ -> expr.node
       | Ast.UnaryOp (uop, e) ->
-          let ve = visit_expr table e in
+          let ve = visit_expr current_cname table e in
           Ast.UnaryOp (uop, ve)
       | Ast.Address lvalue ->
-          let vl = visit_lvalue table lvalue in
+          let vl = visit_lvalue current_cname table lvalue in
           Ast.Address vl
       | Ast.BinaryOp (binop, e1, e2) ->
-          let ve1 = visit_expr table e1 in
-          let ve2 = visit_expr table e2 in
+          let ve1 = visit_expr current_cname table e1 in
+          let ve2 = visit_expr current_cname table e2 in
           Ast.BinaryOp (binop, ve1, ve2)
       | Ast.Call (None, i2, exprs) ->
-          let ve = List.map (visit_expr table) exprs in
-          Ast.Call (None, i2, ve)
+          let ve = List.map (visit_expr current_cname table) exprs in
+          Ast.Call (Some(current_cname), i2, ve)
       | Ast.Call (Some interface, i2, exprs) ->
           (* Add qualifier *)
           let component =
             if interface = "Prelude" then "Prelude"
             else Hashtbl.find table interface
           in
-          let ve = List.map (visit_expr table) exprs in
+          let ve = List.map (visit_expr current_cname table) exprs in
           Ast.Call (Some component, i2, ve)
     in
     new_node ++ expr.annot
 
-  let rec visit_stmt table stmt =
+  let rec visit_stmt current_cname table stmt =
     let node =
       match stmt.node with
       | Ast.If (e, s1, s2) ->
-          let ve = visit_expr table e in
-          let vs1 = visit_stmt table s1 in
-          let vs2 = visit_stmt table s2 in
+          let ve = visit_expr current_cname table e in
+          let vs1 = visit_stmt current_cname table s1 in
+          let vs2 = visit_stmt current_cname table s2 in
           Ast.If (ve, vs1, vs2)
       | Ast.While (e, s1) ->
-          let ve = visit_expr table e in
-          let vs1 = visit_stmt table s1 in
+          let ve = visit_expr current_cname table e in
+          let vs1 = visit_stmt current_cname table s1 in
           Ast.While (ve, vs1)
       | Ast.DoWhile (e, s) ->
-          let ve = visit_expr table e in
-          let vs = visit_stmt table s in
+          let ve = visit_expr current_cname table e in
+          let vs = visit_stmt current_cname table s in
           Ast.DoWhile (ve, vs)
       | Ast.For (e1, e2, e3, s) ->
           let ve1 =
-            match e1 with None -> None | Some e -> Some (visit_expr table e)
+            match e1 with None -> None | Some e -> Some (visit_expr current_cname table e)
           in
           let ve2 =
-            match e2 with None -> None | Some e -> Some (visit_expr table e)
+            match e2 with None -> None | Some e -> Some (visit_expr current_cname table e)
           in
           let ve3 =
-            match e3 with None -> None | Some e -> Some (visit_expr table e)
+            match e3 with None -> None | Some e -> Some (visit_expr current_cname table e)
           in
-          let vs = visit_stmt table s in
+          let vs = visit_stmt current_cname table s in
           Ast.For (ve1, ve2, ve3, vs)
       | Ast.Expr e ->
-          let ve = visit_expr table e in
+          let ve = visit_expr current_cname table e in
           Ast.Expr ve
       | Ast.Return None -> Ast.Return None
       | Ast.Return (Some e) ->
-          let ve = visit_expr table e in
+          let ve = visit_expr current_cname table e in
           Ast.Return (Some ve)
       | Ast.Block stmtordec ->
           (* For each stmtordec in the list stmordec, create a new block in the symboltable *)
-          let vstmtordec = List.map (visit_stmtordec table) stmtordec in
+          let vstmtordec = List.map (visit_stmtordec current_cname table) stmtordec in
           Ast.Block vstmtordec
       | Ast.Skip -> Ast.Skip
     in
     node ++ stmt.annot
 
-  and visit_stmtordec table stmtordec =
+  and visit_stmtordec current_cname table stmtordec =
     match stmtordec.node with
     | Ast.LocalDecl _ -> stmtordec
-    | Ast.Stmt s -> Ast.Stmt (visit_stmt table s) ++ stmtordec.annot
+    | Ast.Stmt s -> Ast.Stmt (visit_stmt current_cname table s) ++ stmtordec.annot
 
-  let visit_definitions table definitions =
+  let visit_definitions current_cname table definitions =
     let visit_definition definition =
       match definition.node with
       | Ast.FunDecl { rtype; fname; formals; body = Some stmt } ->
-          let new_stmt = visit_stmt table stmt in
+          let new_stmt = visit_stmt current_cname table stmt in
           Ast.FunDecl { rtype; fname; formals; body = Some new_stmt }
           ++ definition.annot
       | _ -> definition
@@ -315,7 +315,7 @@ module Qualifier = struct
       | Ast.ComponentDecl { cname; uses = _; provides = _; definitions } -> (
           match Hashtbl.find table cname with
           | ComponentData { uses; provides; links = links_table } ->
-              let vdefinitions = visit_definitions links_table definitions in
+              let vdefinitions = visit_definitions cname links_table definitions in
               Ast.ComponentDecl
                 { cname; uses; provides; definitions = vdefinitions }
               ++ component.annot)
