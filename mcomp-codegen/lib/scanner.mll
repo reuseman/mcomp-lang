@@ -38,14 +38,14 @@
       if num >= integer_min_value && num <= integer_max_value then
         INT_VALUE(num)
       else
-        let msg = Printf.sprintf "Syntax error: The number must be a 32-bit number, between %d and %d." integer_min_value integer_max_value in
+        let msg = Printf.sprintf "Syntax error: The Number must be a 32-bit number, between %d and %d." integer_min_value integer_max_value in
         raise_syntax_error lexbuf msg
 
     let identifier_check_max_lenght id lexbuf =
         if String.length id <= identifier_max_length then
           ID id
         else
-          let msg = Printf.sprintf "Syntax error: The identifier must be less or equal than %d characters." identifier_max_length in
+          let msg = Printf.sprintf "Syntax error: The Identifier must be less or equal than %d characters." identifier_max_length in
           raise_syntax_error lexbuf msg
 }
 
@@ -69,9 +69,14 @@ rule next_token = parse
   | newline
     { Lexing.new_line lexbuf; next_token lexbuf }
 
-  (* Identifer and numbers *)
+  (* Numbers *)
   | number_base_10
   | number_base_16 as num { number_check_interval (int_of_string num) lexbuf  }
+  
+  (* Chars *)
+  | "\'" {  character lexbuf  }
+  
+  (* Identifiers *)
   | identifier as id  
     {
       match Hashtbl.find_opt keywords id with
@@ -121,6 +126,33 @@ rule next_token = parse
   | _ as unrecognized { raise_syntax_error lexbuf (Printf.sprintf "Syntax error: The token \"%c\" is not recognized." unrecognized) }
 
 
+
+
+(* Char helpers *)
+and character = parse 
+  | eof | newline | "\'" { raise_syntax_error lexbuf "Syntax error: The Char must be closed with a \"'\"." }
+  | "" { let c = CHAR_VALUE(character_parser lexbuf) in character_close lexbuf; c}
+
+and character_close = parse
+  | "\'" {  }
+  | _ {raise_syntax_error lexbuf ("Syntax error: The Char is closed with an invalid character. It must be a \"'\".")}
+
+and character_parser = parse 
+  | "\\'"   { '\''    }
+  | "\""    { '\"'    }
+  | "\\"    { '\\'    }
+  | "\\n"   { '\n'    }
+  | "\r"    { '\r'    }
+  | "\t"    { '\t'    }
+  | "\b"    { '\b'    }
+  | "\\f"   { '\x0c'  }
+  | "\\v"   { '\x0b'  }
+  | "\\0"   { '\x00'  }
+  | "\xFF"  { '\xFF'  }
+  | _ as c  { c       }
+  
+
+(* Comment helpers *)
 and single_line_comment = parse
   | newline { next_token lexbuf }
   | eof     { EOF }
