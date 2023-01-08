@@ -247,6 +247,9 @@ module Qualifier = struct
           in
           let ve = List.map (visit_expr current_cname table) exprs in
           Ast.Call (Some component, i2, ve)
+      | Ast.IncDec (lvalue, inc_dec, pre_post) ->
+          let vl = visit_lvalue current_cname table lvalue in
+          Ast.IncDec (vl, inc_dec, pre_post)
     in
     new_node ++ expr.annot
 

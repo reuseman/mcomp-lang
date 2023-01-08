@@ -10,6 +10,9 @@
 %token NEG
 %token NOT "!"
 
+// Increment and decrement operators (both prefix and postfix)
+%token PLUSPLUS "++"  MINUSMINUS "--"
+
 // Binary operators
 %token PLUS "+"   MINUS "-"   TIMES "*"   DIV "/"   MOD "%"
 
@@ -267,6 +270,14 @@ expr:
     { Ast.UnaryOp(Ast.Neg, e) $$ $loc }
   | e1=expr bo=bin_op e2=expr
     { Ast.BinaryOp(bo, e1, e2) $$ $loc }
+  | "++" lv=l_value
+    { Ast.IncDec(lv, Ast.Inc, Ast.Pre) $$ $loc }
+  | lv=l_value "++"
+    { Ast.IncDec(lv, Ast.Inc, Ast.Post) $$ $loc }
+  | "--" lv=l_value
+    { Ast.IncDec(lv, Ast.Dec, Ast.Pre) $$ $loc }
+  | lv=l_value "--"
+    { Ast.IncDec(lv, Ast.Dec, Ast.Post) $$ $loc }
 ;
 
 

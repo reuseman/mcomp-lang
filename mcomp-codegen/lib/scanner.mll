@@ -117,7 +117,11 @@ rule next_token = parse
   | ';' { SEMICOLON }
   | '&' { REFERENCE }
   | "=" { ASSIGN    }
-  | "<-"{ ARROW     }
+
+  (* Two character symbols *)
+  | "++" { PLUSPLUS     }
+  | "--" { MINUSMINUS   }
+  | "<-" { ARROW        }
 
   (* End of file *)
   | eof { EOF }

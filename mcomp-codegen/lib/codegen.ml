@@ -201,6 +201,23 @@ and gen_expr fun_ctx expr =
     end
   | Ast.Call(None, _, _) -> ignore_case 5 "gen_expr: Call: None"
 
+  | Ast.IncDec(lvalue, inc_dec, pre_post) ->
+     (* Get the lvalue *)
+    let g_lvalue = gen_lvalue ~address:false ~load_value:false fun_ctx lvalue in
+    let g_lvalue_value = L.build_load g_lvalue "t_load" fun_ctx.ll_builder in
+    let one = L.const_int int_type 1 in
+    (* Apply increment or decrement to the value *)
+    let g_result = match inc_dec with
+    | Ast.Inc -> L.build_add g_lvalue_value one "t_inc" fun_ctx.ll_builder
+    | Ast.Dec -> L.build_sub g_lvalue_value one "t_dec" fun_ctx.ll_builder
+    in
+    (* Store the new value *)
+    let _ = L.build_store g_result g_lvalue fun_ctx.ll_builder in
+    (* Return the new result (e.g. pre) or the old value (e.g. post) *)
+    match pre_post with
+    | Ast.Pre -> g_result
+    | Ast.Post -> g_lvalue_value
+
 (* Currently it returns an address *)
 and gen_lvalue ?(address=false) ?(load_value=false) ctx lvalue =
   let lookup cname id = match cname with

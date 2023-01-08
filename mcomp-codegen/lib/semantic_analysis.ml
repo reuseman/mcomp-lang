@@ -739,6 +739,21 @@ module TypeAnalysis = struct
 
 
   (**
+    Given a type and a location, check weather the type is valid for the increment and decrement operators.
+    @param t The type to check.
+    @param loc The location of the expression.
+    @raise SemanticError if the type is not valid.
+  *)
+  let is_inc_dec_valid t loc =
+    match t with
+    | Ast.TInt -> ()
+    | _ -> 
+      let err_msg = Printf.sprintf "The increment and decrement operators can only be applied to integers." in
+      let help_msg = Printf.sprintf "You are using the operator on a '%s'." (Ast.show_typ t) in
+      semantic_error loc err_msg help_msg
+
+  
+  (**
       Given the environment and the lvalue, return the type annotated lvalue.
       @param env The environment.
       @param lvalue The lvalue to annotate.
@@ -863,6 +878,10 @@ module TypeAnalysis = struct
     | Ast.Call(_, i2, exprs) ->
       let te1 = List.map (annotate_expr env) exprs in
       annotate_call env i2 te1 loc
+    | Ast.IncDec(lvalue, inc_dec, pre_post) ->
+      let tl = annotate_lvalue env lvalue in
+      let typ = is_inc_dec_valid tl.annot loc in
+      Ast.IncDec(tl, inc_dec, pre_post) ++ tl.annot
 
   (**
     Given the environment,the function name and list of arguments,

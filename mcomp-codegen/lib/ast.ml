@@ -20,6 +20,10 @@ type binop =
 type uop = Neg | Not [@@deriving show, ord, eq]
 type identifier = string [@@deriving show, ord, eq]
 
+(* Increment/Decrement operators with prefix postfix behavior *)
+type incdec_typ = Inc | Dec [@@deriving show, ord, eq]
+type incdec_order = Pre | Post [@@deriving show, ord, eq]
+
 type typ =
   | TInt                        (* Type int *)
   | TBool                       (* Type bool *)
@@ -49,6 +53,7 @@ and 'a expr_node =
   | Address of 'a lvalue                                  (* Address of a variable *)
   | BinaryOp of binop * 'a expr * 'a expr                 (* Binary primitive operator *)
   | Call of identifier option * identifier * 'a expr list (* Function call f(...) *)
+  | IncDec of 'a lvalue * incdec_typ * incdec_order       (* Increment/decrement and pre/post e.g. i++ *)
 [@@deriving show, ord, eq]
 
 and 'a lvalue = ('a lvalue_node, 'a) annotated_node
