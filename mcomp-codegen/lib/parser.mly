@@ -16,6 +16,9 @@
 // Binary operators
 %token PLUS "+"   MINUS "-"   TIMES "*"   DIV "/"   MOD "%"
 
+// Assignment binary operators
+%token PLUS_ASSIGN "+="   MINUS_ASSIGN "-="   TIMES_ASSIGN "*="   DIV_ASSIGN "/="   MOD_ASSIGN "%="
+
 // Logical operators
 %token LT "<"   GT ">"  LE "<="   GE ">="   EQ "=="   NE "!="
 %token AND "&&" OR "||"
@@ -51,7 +54,7 @@
 %nonassoc NO_ELSE
 %nonassoc ELSE
 
-%right ASSIGN
+%right ASSIGN PLUS_ASSIGN MINUS_ASSIGN TIMES_ASSIGN DIV_ASSIGN MOD_ASSIGN
 
 %left OR
 %left AND
@@ -260,6 +263,19 @@ expr:
     { Ast.Address(lv) $$ $loc }
   | lv=l_value "=" e=expr
     { Ast.Assign(lv, e) $$ $loc }
+
+    // Assignment binary operators
+  | lv=l_value "+=" e=expr
+    { Ast.AssignBinOp(lv, Ast.Add, e) $$ $loc }
+  | lv=l_value "-=" e=expr
+    { Ast.AssignBinOp(lv, Ast.Sub, e) $$ $loc }
+  | lv=l_value "*=" e=expr
+    { Ast.AssignBinOp(lv, Ast.Mult, e) $$ $loc }
+  | lv=l_value "/=" e=expr
+    { Ast.AssignBinOp(lv, Ast.Div, e) $$ $loc }
+  | lv=l_value "%=" e=expr
+    { Ast.AssignBinOp(lv, Ast.Mod, e) $$ $loc }
+
   | "!" e=expr
     { Ast.UnaryOp(Ast.Not, e) $$ $loc }
   | id=ID "(" e =separated_list(COMMA, expr) ")"
@@ -270,6 +286,8 @@ expr:
     { Ast.UnaryOp(Ast.Neg, e) $$ $loc }
   | e1=expr bo=bin_op e2=expr
     { Ast.BinaryOp(bo, e1, e2) $$ $loc }
+  
+  // Increment and decrement
   | "++" lv=l_value
     { Ast.IncDec(lv, Ast.Inc, Ast.Pre) $$ $loc }
   | lv=l_value "++"

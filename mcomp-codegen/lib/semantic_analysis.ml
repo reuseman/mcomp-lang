@@ -861,6 +861,17 @@ module TypeAnalysis = struct
       let te = annotate_expr env expr in
       is_assignment_legal tl te loc;
       Ast.Assign(tl, te) ++ tl.annot
+    | Ast.AssignBinOp(lvalue, binop, expr) ->
+      (* Get the real expression and check it
+         e.g. a += 4    -->   a = a + 4   *)
+      let temp_lvalue = Ast.LV(lvalue) ++ lvalue.annot in
+      let temp_expr = Ast.BinaryOp(binop, temp_lvalue, expr) ++ expr.annot in
+      let desugared_expr = Ast.Assign(lvalue, temp_expr) ++ expr.annot in
+      let t_desugared_expr = annotate_expr env desugared_expr in
+
+      let tl = annotate_lvalue env lvalue in
+      let te = annotate_expr env expr in
+      Ast.AssignBinOp(tl, binop, te) ++ t_desugared_expr.annot
     | Ast.ILiteral(i) -> Ast.ILiteral(i) ++ Ast.TInt
     | Ast.CLiteral(c) -> Ast.CLiteral(c) ++ Ast.TChar
     | Ast.BLiteral(b) -> Ast.BLiteral(b) ++ Ast.TBool

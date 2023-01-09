@@ -46,6 +46,7 @@ type 'a expr = ('a expr_node, 'a) annotated_node
 and 'a expr_node =
   | LV of 'a lvalue                                       (* x or a[e] *)
   | Assign of 'a lvalue * 'a expr                         (* x=e or a[e]=e *)
+  | AssignBinOp of 'a lvalue * binop * 'a expr            (* x+=e or a[e]+=e *)
   | ILiteral of int                                       (* Integer literal *)
   | CLiteral of char                                      (* Char literal *)
   | BLiteral of bool                                      (* Bool literal *)

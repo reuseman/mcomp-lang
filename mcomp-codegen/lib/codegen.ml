@@ -91,38 +91,72 @@ let gen_unary_op uop typ e ll_builder =
   in fun_build ll_builder
 
 (* CODEGEN *)
-let rec gen_binary_op binop typ1 typ2 e1 e2 fun_ctx = 
-  let aux_non_boolean binop e1 e2 fun_ctx =
-    let gen_e1 = gen_expr fun_ctx e1 in
-    let gen_e2 = gen_expr fun_ctx e2 in
-    match binop with
-    (* Math operators *)
-    | Ast.Add     ->    L.build_add   gen_e1 gen_e2 "t_add" 
-    | Ast.Sub     ->    L.build_sub   gen_e1 gen_e2 "t_sub"
-    | Ast.Mult    ->    L.build_mul   gen_e1 gen_e2 "t_mult"
-    | Ast.Div     ->    L.build_udiv  gen_e1 gen_e2 "t_div"
-    | Ast.Mod     ->    L.build_srem  gen_e1 gen_e2 "t_mod"
-
-    (* Compare operators *)
-    | Ast.Equal   ->    L.build_icmp L.Icmp.Eq  gen_e1 gen_e2 "t_eq"
-    | Ast.Neq     ->    L.build_icmp L.Icmp.Ne  gen_e1 gen_e2 "t_neq"
-    | Ast.Less    ->    L.build_icmp L.Icmp.Slt gen_e1 gen_e2 "t_lt"
-    | Ast.Leq     ->    L.build_icmp L.Icmp.Sle gen_e1 gen_e2 "t_leq"
-    | Ast.Greater ->    L.build_icmp L.Icmp.Sgt gen_e1 gen_e2 "t_gt"
-    | Ast.Geq     ->    L.build_icmp L.Icmp.Sge gen_e1 gen_e2 "t_geq"
-    | _ -> ignore_case 3 "gen_binary_op: boolean operators are handled elsewhere"
-  in 
+  let rec gen_binary_op binop typ1 typ2 e1_generator e2_generator fun_ctx = 
+    let aux_non_boolean binop fun_ctx =
+      let gen_e1 = e1_generator fun_ctx in
+      let gen_e2 = e2_generator fun_ctx in
+      match binop with
+      (* Math operators *)
+      | Ast.Add     ->    L.build_add   gen_e1 gen_e2 "t_add" 
+      | Ast.Sub     ->    L.build_sub   gen_e1 gen_e2 "t_sub"
+      | Ast.Mult    ->    L.build_mul   gen_e1 gen_e2 "t_mult"
+      | Ast.Div     ->    L.build_udiv  gen_e1 gen_e2 "t_div"
+      | Ast.Mod     ->    L.build_srem  gen_e1 gen_e2 "t_mod"
   
-  let fun_build = match binop with
-  (* Boolean operators needs a lazy codegen of the operands in the proper blocks *)
-  | Ast.And     ->    gen_and_short_circuit fun_ctx e1 e2 
-  | Ast.Or      ->    gen_or_short_circuit fun_ctx e1 e2 
-  (* Other operators *)
-  | _ -> aux_non_boolean binop e1 e2 fun_ctx
-  in fun_build fun_ctx.ll_builder
+      (* Compare operators *)
+      | Ast.Equal   ->    L.build_icmp L.Icmp.Eq  gen_e1 gen_e2 "t_eq"
+      | Ast.Neq     ->    L.build_icmp L.Icmp.Ne  gen_e1 gen_e2 "t_neq"
+      | Ast.Less    ->    L.build_icmp L.Icmp.Slt gen_e1 gen_e2 "t_lt"
+      | Ast.Leq     ->    L.build_icmp L.Icmp.Sle gen_e1 gen_e2 "t_leq"
+      | Ast.Greater ->    L.build_icmp L.Icmp.Sgt gen_e1 gen_e2 "t_gt"
+      | Ast.Geq     ->    L.build_icmp L.Icmp.Sge gen_e1 gen_e2 "t_geq"
+      | _ -> ignore_case 3 "gen_binary_op: boolean operators are handled elsewhere"
+    in 
+    
+    let fun_build = match binop with
+    (* Boolean operators needs a lazy codegen of the operands in the proper blocks *)
+    | Ast.And     ->    gen_and_short_circuit fun_ctx e1_generator e2_generator 
+    | Ast.Or      ->    gen_or_short_circuit fun_ctx e1_generator e2_generator 
+    (* Other operators *)
+    | _ -> aux_non_boolean binop fun_ctx
+    in fun_build fun_ctx.ll_builder
 
 
-and gen_and_short_circuit fun_ctx left_e right_e = 
+and gen_and_short_circuit fun_ctx left_e_generator right_e_generator = 
+  let continue_block = L.append_block ll_ctx "and_sc_continue" fun_ctx.ll_value in
+  let end_block = L.append_block ll_ctx "and_sc_end" fun_ctx.ll_value in
+  
+  let g_left_e = left_e_generator fun_ctx in
+  let incoming_bb_1 = L.insertion_block fun_ctx.ll_builder in
+  (* If the left expression is true continue, otherwise jump to the end block *)
+  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_cond_br g_left_e continue_block end_block) in
+  L.position_at_end continue_block fun_ctx.ll_builder;
+  
+  let g_right_e = right_e_generator fun_ctx in
+  let incoming_bb_2 = L.insertion_block fun_ctx.ll_builder in
+  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_br end_block) in
+  L.position_at_end end_block fun_ctx.ll_builder;
+
+  L.build_phi [(g_left_e, incoming_bb_1); (g_right_e, incoming_bb_2)] "t_phi_and_sc"
+
+and gen_or_short_circuit fun_ctx left_e_generator right_e_generator = 
+  let continue_block = L.append_block ll_ctx "or_sc_continue" fun_ctx.ll_value in
+  let end_block = L.append_block ll_ctx "or_sc_end" fun_ctx.ll_value in
+  
+  let g_left_e = left_e_generator fun_ctx in
+  let incoming_bb_1 = L.insertion_block fun_ctx.ll_builder in
+  (* If the left expression is true jump to the end block, otherwise continue *)
+  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_cond_br g_left_e end_block continue_block) in
+  L.position_at_end continue_block fun_ctx.ll_builder;
+  
+  let g_right_e = right_e_generator fun_ctx in
+  let incoming_bb_2 = L.insertion_block fun_ctx.ll_builder in
+  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_br end_block) in
+  L.position_at_end end_block fun_ctx.ll_builder;
+
+  L.build_phi [(g_left_e, incoming_bb_1); (g_right_e, incoming_bb_2)] "t_phi_or_sc"
+
+(* and gen_and_short_circuit fun_ctx left_e right_e = 
   let continue_block = L.append_block ll_ctx "and_sc_continue" fun_ctx.ll_value in
   let end_block = L.append_block ll_ctx "and_sc_end" fun_ctx.ll_value in
   
@@ -173,6 +207,15 @@ and gen_expr fun_ctx expr =
     in
     L.build_store g_expr g_lvalue fun_ctx.ll_builder |> ignore;
     g_expr
+
+  | Ast.AssignBinOp(lvalue, binop, expr) ->
+    let g_lvalue = gen_lvalue ~address:false ~load_value:false fun_ctx lvalue in
+    let lvalue_generator = fun fun_ctx -> L.build_load g_lvalue "t_load" fun_ctx.ll_builder in
+    let expr_generator = fun fun_ctx -> gen_expr fun_ctx expr in
+    (* By using the closure, here the lvalue is generated only once *)
+    let g_binop = gen_binary_op binop lvalue.annot expr.annot lvalue_generator expr_generator fun_ctx in
+    L.build_store g_binop g_lvalue fun_ctx.ll_builder |> ignore;
+    g_binop
 
   | Ast.ILiteral(i) -> L.const_int int_type i
   | Ast.CLiteral(c) -> L.const_int char_type (Char.code c)

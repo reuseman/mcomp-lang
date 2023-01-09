@@ -103,6 +103,13 @@ rule next_token = parse
   | "&&"  { AND   }
   | "||"  { OR    }
 
+  (* Assign binary operators *)
+  | "+="  { PLUS_ASSIGN  }
+  | "-="  { MINUS_ASSIGN }
+  | "*="  { TIMES_ASSIGN }
+  | "/="  { DIV_ASSIGN   }
+  | "%="  { MOD_ASSIGN   }
+
 (* Single character symbols *)
   | "!" { NOT       }
   | "{" { LBRACE    }

@@ -223,6 +223,10 @@ module Qualifier = struct
           let vl = visit_lvalue current_cname table lvalue in
           let ve = visit_expr current_cname table expr in
           Ast.Assign (vl, ve)
+      | Ast.AssignBinOp (lvalue, binop, expr) ->
+          let vl = visit_lvalue current_cname table lvalue in
+          let ve = visit_expr current_cname table expr in
+          Ast.AssignBinOp (vl, binop, ve)
       | Ast.ILiteral _ -> expr.node
       | Ast.CLiteral _ -> expr.node
       | Ast.BLiteral _ -> expr.node
