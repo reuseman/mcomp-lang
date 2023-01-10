@@ -2,6 +2,7 @@ open Ast
 
 let prelude_signature = [
   "print", TFun([TInt],TVoid);
+  "print_float", TFun([TFloat],TVoid);
   "getint", TFun([], TInt)
 ]
 

@@ -12,6 +12,10 @@ void _prelude_print(int n){
   printf("%d\n", n);
 }
 
+void _prelude_print_float(float n){
+  printf("%0.4f\n", n);
+}
+
 // command to compile with clang and produce bit code
 // clang -emit-llvm -c rt-support.c -o rt-support.bc
 

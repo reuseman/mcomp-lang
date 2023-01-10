@@ -678,10 +678,13 @@ module TypeAnalysis = struct
     match (binop, a.annot, b.annot) with
     (* Math operators with operands of type int or &int *)
     | _, _, _ when Ast.is_math_op(binop) && Ast.is_of_typ_or_reftyp Ast.TInt t1 && Ast.is_of_typ_or_reftyp Ast.TInt t2 -> Ast.TInt
+    (* Math operators with operands of type float or &float *)
+    | _, _, _ when Ast.is_math_op(binop) && Ast.is_of_typ_or_reftyp Ast.TFloat t1 && Ast.is_of_typ_or_reftyp Ast.TFloat t2 -> Ast.TFloat
     (* Boolean operators with operands of type bool or &bool *)
     | _, _, _ when Ast.is_bool_op(binop) && Ast.is_of_typ_or_reftyp Ast.TBool t1 && Ast.is_of_typ_or_reftyp Ast.TBool t2 -> Ast.TBool
-    (* Comparison operators with operands of type (int or &int) xor (bool or &bool) *)
+    (* Comparison operators with operands of type (int or &int) xor (float or &float) xor (bool or &bool) *)
     | _, _, _ when Ast.is_comp_op(binop) && ((Ast.is_of_typ_or_reftyp Ast.TInt t1 && Ast.is_of_typ_or_reftyp Ast.TInt t2) ||
+                                             (Ast.is_of_typ_or_reftyp Ast.TFloat t1 && Ast.is_of_typ_or_reftyp Ast.TFloat t2) ||
                                              (Ast.is_of_typ_or_reftyp Ast.TBool t1 && Ast.is_of_typ_or_reftyp Ast.TBool t2)) -> Ast.TBool
     | _ ->
       let err_msg = Printf.sprintf "The binary operator '%s' is not defined for the types '%s' and '%s'." (Ast.show_binop binop) (Ast.show_typ t1) (Ast.show_typ t2) in
@@ -699,6 +702,7 @@ module TypeAnalysis = struct
   let is_unary_op_valid uop a loc =
     match (uop, a.annot) with
     | (Ast.Neg, _) when Ast.is_of_typ_or_reftyp Ast.TInt a.annot -> Ast.TInt
+    | (Ast.Neg, _) when Ast.is_of_typ_or_reftyp Ast.TFloat a.annot -> Ast.TFloat
     | (Ast.Neg, _) -> raise (Semantic_error(loc, "Unary 'negation' can only be applied to integers."))
     | (Ast.Not, _) when Ast.is_of_typ_or_reftyp Ast.TBool a.annot -> Ast.TBool
     | (Ast.Not, _) -> raise (Semantic_error(loc, "Unary 'not' can only be applied to booleans."))
@@ -873,6 +877,7 @@ module TypeAnalysis = struct
       let te = annotate_expr env expr in
       Ast.AssignBinOp(tl, binop, te) ++ t_desugared_expr.annot
     | Ast.ILiteral(i) -> Ast.ILiteral(i) ++ Ast.TInt
+    | Ast.FLiteral(f) -> Ast.FLiteral(f) ++ Ast.TFloat
     | Ast.CLiteral(c) -> Ast.CLiteral(c) ++ Ast.TChar
     | Ast.BLiteral(b) -> Ast.BLiteral(b) ++ Ast.TBool
     | Ast.UnaryOp(uop, e) -> 

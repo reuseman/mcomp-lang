@@ -228,6 +228,7 @@ module Qualifier = struct
           let ve = visit_expr current_cname table expr in
           Ast.AssignBinOp (vl, binop, ve)
       | Ast.ILiteral _ -> expr.node
+      | Ast.FLiteral _ -> expr.node
       | Ast.CLiteral _ -> expr.node
       | Ast.BLiteral _ -> expr.node
       | Ast.UnaryOp (uop, e) ->

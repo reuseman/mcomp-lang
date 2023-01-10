@@ -11,6 +11,10 @@
   let identifier_max_length = 64
   let integer_max_value     = 2147483647 
   let integer_min_value     = -2147483648
+  let float_max_value       = Float.max_float
+  let float_min_value       = Float.min_float
+
+  (* Keywords *)
 
   let keywords = Utils.create_hashtbl
     [("interface",   INTERFACE);
@@ -26,6 +30,7 @@
       ("for",        FOR);
       ("while",      WHILE);
       ("int",        TYPE_INT);
+      ("float",      TYPE_FLOAT);
       ("char",       TYPE_CHAR);
       ("void",       TYPE_VOID);
       ("bool",       TYPE_BOOL);
@@ -34,19 +39,27 @@
     ]
 
     (* Check constraints *)
-    let number_check_interval num lexbuf = 
+    let int32_check_interval num lexbuf = 
       if num >= integer_min_value && num <= integer_max_value then
         INT_VALUE(num)
       else
-        let msg = Printf.sprintf "Syntax error: The Number must be a 32-bit number, between %d and %d." integer_min_value integer_max_value in
+        let msg = Printf.sprintf "Syntax error: The Integer must be a 32-bit number, between %d and %d." integer_min_value integer_max_value in
+        raise_syntax_error lexbuf msg
+
+    let float32_check_interval num lexbuf =
+      match classify_float num with
+      | Float.FP_normal | Float.FP_subnormal | Float.FP_zero -> 
+        FLOAT_VALUE(num)
+      | Float.FP_infinite | Float.FP_nan -> 
+        let msg = Printf.sprintf "Syntax error: The Float must be a 32-bit number, between %f and %f." float_min_value float_max_value in
         raise_syntax_error lexbuf msg
 
     let identifier_check_max_lenght id lexbuf =
-        if String.length id <= identifier_max_length then
-          ID id
-        else
-          let msg = Printf.sprintf "Syntax error: The Identifier must be less or equal than %d characters." identifier_max_length in
-          raise_syntax_error lexbuf msg
+      if String.length id <= identifier_max_length then
+        ID id
+      else
+        let msg = Printf.sprintf "Syntax error: The Identifier must be less or equal than %d characters." identifier_max_length in
+        raise_syntax_error lexbuf msg
 }
 
 
@@ -60,6 +73,8 @@ let newline        = '\r' | '\n' | "\r\n"
 let identifier     = (alpha | '_') (alpha | digit | '_')*
 let number_base_10 = digit+
 let number_base_16 = "0x"(digit | ['0'-'9' 'a'-'f' 'A'-'F'])+
+let exponent      = ['e' 'E'] ['+' '-']? digit+
+let float         = (digit digit* '.' digit* | digit* '.' digit digit*) exponent?
 
 
 (* Declaration of scanner functions *)
@@ -71,7 +86,8 @@ rule next_token = parse
 
   (* Numbers *)
   | number_base_10
-  | number_base_16 as num { number_check_interval (int_of_string num) lexbuf  }
+  | number_base_16 as num { int32_check_interval (int_of_string num) lexbuf  }
+  | float as num { float32_check_interval (float_of_string num) lexbuf }
   
   (* Chars *)
   | "\'" {  character lexbuf  }
@@ -135,8 +151,6 @@ rule next_token = parse
   
   (* Unrecognized token *)
   | _ as unrecognized { raise_syntax_error lexbuf (Printf.sprintf "Syntax error: The token \"%c\" is not recognized." unrecognized) }
-
-
 
 
 (* Char helpers *)

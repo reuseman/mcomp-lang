@@ -34,6 +34,7 @@
 %token ARROW "<-"
 
 %token <int>    INT_VALUE
+%token <float>  FLOAT_VALUE
 %token <char>   CHAR_VALUE
 %token <bool>   BOOL_VALUE
 %token <string> ID
@@ -216,9 +217,10 @@ complex_type:
 ;
 
 
-// 13 - BasicType ::= "int" | "char" | "void" | "bool"  
+// 13 - BasicType ::= "int" | "float" | "char" | "void" | "bool"  
 basic_type:
   | "int"   { TInt  }
+  | "float" { TFloat }
   | "char"  { TChar }
   | "bool"  { TBool }
   | "void"  { TVoid }
@@ -248,11 +250,14 @@ stmt:
 ;
 
 
-// 15 - Expr ::= INT | CHAR | BOOL | "(" Expr ")" | "&" LValue | LValue "=" Expr | "!" Expr 
-//              | ID "(" ((Expr ",")* Expr)? ")" | LValue | "-" Expr | Expr BinOp Expr  
+// 15 - Expr ::= INT | FLOAT | CHAR | BOOL | "(" Expr ")" | "&" LValue | LValue "=" Expr | "!" Expr 
+//              | ID "(" ((Expr ",")* Expr)? ")" | LValue | "-" Expr | Expr BinOp Expr
+//              | LValue BinOp Expr | "++" LValue | LValue "++" | LValue "--" | "--" LValue
 expr:
   | i=INT_VALUE
     { Ast.ILiteral(i) $$ $loc }
+  | f=FLOAT_VALUE
+    { Ast.FLiteral(f) $$ $loc }
   | c=CHAR_VALUE
     { Ast.CLiteral(c) $$ $loc }
   | b=BOOL_VALUE

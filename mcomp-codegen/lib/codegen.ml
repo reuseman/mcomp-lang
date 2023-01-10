@@ -34,16 +34,20 @@ let ll_ctx = L.global_context ()
 
 (* Get references to the LLVM types *)
 let int_type = L.i32_type ll_ctx
+let float_type = L.float_type ll_ctx
 let bool_type = L.i1_type ll_ctx
 let char_type = L.i8_type ll_ctx
 let void_type = L.void_type ll_ctx
 
 
 (* LLVM constants *)
-let llvm_zero = L.const_int int_type 0
+let llvm_zero_i = L.const_int int_type 0
+let llvm_one_i = L.const_int int_type 1
+let llvm_one_f = L.const_float float_type 1.0
 
 let rec ast_to_llvm = function
   | Ast.TInt  -> int_type
+  | Ast.TFloat -> float_type
   | Ast.TBool -> bool_type
   | Ast.TChar -> char_type
   | Ast.TVoid -> void_type
@@ -86,39 +90,69 @@ let build_alloca typ id builder =
 let gen_unary_op uop typ e ll_builder = 
   let fun_build = match (uop, typ) with
   | (Ast.Neg, Ast.TInt)   -> L.build_neg e "t_neg"
+  | (Ast.Neg, Ast.TFloat) -> L.build_fneg e "t_neg"
   | (Ast.Not, Ast.TBool)  -> L.build_not e "t_not"
   | _ -> ignore_case 2 "gen_unary_op: type not supported"
   in fun_build ll_builder
 
 (* CODEGEN *)
   let rec gen_binary_op binop typ1 typ2 e1_generator e2_generator fun_ctx = 
-    let aux_non_boolean binop fun_ctx =
+    let aux_non_boolean binop typ1 typ2 fun_ctx =
       let gen_e1 = e1_generator fun_ctx in
       let gen_e2 = e2_generator fun_ctx in
-      match binop with
-      (* Math operators *)
-      | Ast.Add     ->    L.build_add   gen_e1 gen_e2 "t_add" 
-      | Ast.Sub     ->    L.build_sub   gen_e1 gen_e2 "t_sub"
-      | Ast.Mult    ->    L.build_mul   gen_e1 gen_e2 "t_mult"
-      | Ast.Div     ->    L.build_udiv  gen_e1 gen_e2 "t_div"
-      | Ast.Mod     ->    L.build_srem  gen_e1 gen_e2 "t_mod"
-  
-      (* Compare operators *)
-      | Ast.Equal   ->    L.build_icmp L.Icmp.Eq  gen_e1 gen_e2 "t_eq"
-      | Ast.Neq     ->    L.build_icmp L.Icmp.Ne  gen_e1 gen_e2 "t_neq"
-      | Ast.Less    ->    L.build_icmp L.Icmp.Slt gen_e1 gen_e2 "t_lt"
-      | Ast.Leq     ->    L.build_icmp L.Icmp.Sle gen_e1 gen_e2 "t_leq"
-      | Ast.Greater ->    L.build_icmp L.Icmp.Sgt gen_e1 gen_e2 "t_gt"
-      | Ast.Geq     ->    L.build_icmp L.Icmp.Sge gen_e1 gen_e2 "t_geq"
-      | _ -> ignore_case 3 "gen_binary_op: boolean operators are handled elsewhere"
-    in 
+      match (typ1, typ2) with
+      | (Ast.TInt, Ast.TInt) -> 
+        begin
+          match binop with
+          (* Math operators *)
+          | Ast.Add     ->    L.build_add   gen_e1 gen_e2 "t_add" 
+          | Ast.Sub     ->    L.build_sub   gen_e1 gen_e2 "t_sub"
+          | Ast.Mult    ->    L.build_mul   gen_e1 gen_e2 "t_mult"
+          | Ast.Div     ->    L.build_udiv  gen_e1 gen_e2 "t_div"
+          | Ast.Mod     ->    L.build_srem  gen_e1 gen_e2 "t_mod"
+      
+          (* Compare operators - Signed *)
+          | Ast.Equal   ->    L.build_icmp L.Icmp.Eq  gen_e1 gen_e2 "t_eq"
+          | Ast.Neq     ->    L.build_icmp L.Icmp.Ne  gen_e1 gen_e2 "t_neq"
+          | Ast.Less    ->    L.build_icmp L.Icmp.Slt gen_e1 gen_e2 "t_lt"
+          | Ast.Leq     ->    L.build_icmp L.Icmp.Sle gen_e1 gen_e2 "t_leq"
+          | Ast.Greater ->    L.build_icmp L.Icmp.Sgt gen_e1 gen_e2 "t_gt"
+          | Ast.Geq     ->    L.build_icmp L.Icmp.Sge gen_e1 gen_e2 "t_geq"
+
+          | _ -> ignore_case 3 "gen_binary_op: boolean operators are handled elsewhere"
+        end
+      | (Ast.TFloat, Ast.TFloat) ->
+        begin
+          match binop with 
+          (* Float-Math operators *)
+          | Ast.Add     ->    L.build_fadd  gen_e1 gen_e2 "t_fadd"
+          | Ast.Sub     ->    L.build_fsub  gen_e1 gen_e2 "t_fsub"
+          | Ast.Mult    ->    L.build_fmul  gen_e1 gen_e2 "t_fmult"
+          | Ast.Div     ->    L.build_fdiv  gen_e1 gen_e2 "t_fdiv"
+          | Ast.Mod     ->    L.build_frem  gen_e1 gen_e2 "t_fmod"
+      
+          (* Float-Compare operators *)
+          (* Ordered that allows to be IEEE 754 compliant. e.g. NaN == NaN -> False *)
+          | Ast.Equal   ->    L.build_fcmp L.Fcmp.Oeq gen_e1 gen_e2 "t_feq"
+          | Ast.Neq     ->    L.build_fcmp L.Fcmp.One gen_e1 gen_e2 "t_fneq"
+          | Ast.Less    ->    L.build_fcmp L.Fcmp.Olt gen_e1 gen_e2 "t_flt"
+          | Ast.Leq     ->    L.build_fcmp L.Fcmp.Ole gen_e1 gen_e2 "t_fleq"
+          | Ast.Greater ->    L.build_fcmp L.Fcmp.Ogt gen_e1 gen_e2 "t_fgt"
+          | Ast.Geq     ->    L.build_fcmp L.Fcmp.Oge gen_e1 gen_e2 "t_fgeq"
+
+          | _ -> ignore_case 3 "gen_binary_op: boolean operators are handled elsewhere"
+        end
+      | _ -> ignore_case 4 "gen_binary_op: type not supported"
     
+    in
+
     let fun_build = match binop with
-    (* Boolean operators needs a lazy codegen of the operands in the proper blocks *)
-    | Ast.And     ->    gen_and_short_circuit fun_ctx e1_generator e2_generator 
-    | Ast.Or      ->    gen_or_short_circuit fun_ctx e1_generator e2_generator 
-    (* Other operators *)
-    | _ -> aux_non_boolean binop fun_ctx
+      (* Boolean operators needs a lazy codegen of the operands in the proper blocks *)
+      | Ast.And     ->    gen_and_short_circuit fun_ctx e1_generator e2_generator 
+      | Ast.Or      ->    gen_or_short_circuit fun_ctx e1_generator e2_generator 
+      (* Other operators *)
+      | _ -> aux_non_boolean binop typ1 typ2 fun_ctx
+    
     in fun_build fun_ctx.ll_builder
 
 
@@ -218,6 +252,7 @@ and gen_expr fun_ctx expr =
     g_binop
 
   | Ast.ILiteral(i) -> L.const_int int_type i
+  | Ast.FLiteral(f) -> L.const_float float_type f
   | Ast.CLiteral(c) -> L.const_int char_type (Char.code c)
   | Ast.BLiteral(b) -> L.const_int bool_type (if b then 1 else 0)
 
@@ -230,7 +265,9 @@ and gen_expr fun_ctx expr =
     gen_lvalue ~address:true ~load_value:false fun_ctx lvalue
 
   | Ast.BinaryOp(binop, e1, e2) ->
-    gen_binary_op binop e1.annot e2.annot e1 e2 fun_ctx
+    let e1_generator = fun fun_ctx -> gen_expr fun_ctx e1 in
+    let e2_generator = fun fun_ctx -> gen_expr fun_ctx e2 in
+    gen_binary_op binop e1.annot e2.annot e1_generator e2_generator fun_ctx
 
   | Ast.Call(Some(cname), fun_name, exprs) ->
     begin
@@ -250,9 +287,12 @@ and gen_expr fun_ctx expr =
     let g_lvalue_value = L.build_load g_lvalue "t_load" fun_ctx.ll_builder in
     let one = L.const_int int_type 1 in
     (* Apply increment or decrement to the value *)
-    let g_result = match inc_dec with
-    | Ast.Inc -> L.build_add g_lvalue_value one "t_inc" fun_ctx.ll_builder
-    | Ast.Dec -> L.build_sub g_lvalue_value one "t_dec" fun_ctx.ll_builder
+    let g_result = match (lvalue.annot, inc_dec) with
+    | Ast.TInt, Ast.Inc -> L.build_add g_lvalue_value llvm_one_i "t_inc" fun_ctx.ll_builder
+    | Ast.TInt, Ast.Dec -> L.build_sub g_lvalue_value llvm_one_i "t_dec" fun_ctx.ll_builder
+    | Ast.TFloat, Ast.Inc -> L.build_fadd g_lvalue_value llvm_one_f "t_finc" fun_ctx.ll_builder
+    | Ast.TFloat, Ast.Dec -> L.build_fsub g_lvalue_value llvm_one_f "t_fdec" fun_ctx.ll_builder
+    | _ -> ignore_case 6 "gen_expr: IncDec: type"
     in
     (* Store the new value *)
     let _ = L.build_store g_result g_lvalue fun_ctx.ll_builder in
@@ -465,8 +505,8 @@ let rec gen_stmt fun_ctx stmt =
   | Ast.Return(None) ->
     add_ending_instruction fun_ctx.ll_builder (L.build_ret_void); false
   
-  | Ast.Return(Some(e)) ->
-    add_ending_instruction fun_ctx.ll_builder (L.build_ret (gen_expr fun_ctx e)); false
+  | Ast.Return(Some(expr)) ->
+    add_ending_instruction fun_ctx.ll_builder (L.build_ret (gen_expr fun_ctx expr)); false
   | Ast.Block(stmtordec) -> 
     (* TODO: be aware of this, because in fundecl I already create a new block *)
     let fun_ctx = {fun_ctx with table = Symbol_table.begin_block fun_ctx.table} in

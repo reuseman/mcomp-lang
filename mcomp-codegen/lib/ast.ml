@@ -26,6 +26,7 @@ type incdec_order = Pre | Post [@@deriving show, ord, eq]
 
 type typ =
   | TInt                        (* Type int *)
+  | TFloat                      (* Type float *)
   | TBool                       (* Type bool *)
   | TChar                       (* Type char *)
   | TArray of typ * int option  (* Array type *)
@@ -48,6 +49,7 @@ and 'a expr_node =
   | Assign of 'a lvalue * 'a expr                         (* x=e or a[e]=e *)
   | AssignBinOp of 'a lvalue * binop * 'a expr            (* x+=e or a[e]+=e *)
   | ILiteral of int                                       (* Integer literal *)
+  | FLiteral of float                                     (* Float literal *)
   | CLiteral of char                                      (* Char literal *)
   | BLiteral of bool                                      (* Bool literal *)
   | UnaryOp of uop * 'a expr                              (* Unary primitive operator *)
@@ -217,6 +219,7 @@ let is_of_typ_or_reftyp oracle_typ to_check =
 *)
 let rec show_typ = function
   | TInt -> "int"
+  | TFloat -> "float"
   | TBool -> "bool"
   | TChar -> "char"
   | TArray (t, None) -> Printf.sprintf "%s[]" (show_typ t)
