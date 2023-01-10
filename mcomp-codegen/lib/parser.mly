@@ -49,7 +49,7 @@
 %token IF "if"    ELSE "else"   FOR "for"         WHILE "while"
 
 // Types
-%token TYPE_INT "int"   TYPE_CHAR "char"  TYPE_VOID "void"  TYPE_BOOL "bool"
+%token TYPE_INT "int"   TYPE_FLOAT "float"   TYPE_CHAR "char"  TYPE_VOID "void"  TYPE_BOOL "bool"
 
 /* Precedence and associativity specification */
 %nonassoc NO_ELSE
