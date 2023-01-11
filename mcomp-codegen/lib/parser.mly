@@ -141,7 +141,7 @@ links:
 // 4 - IMemberDecl ::= "var" VarSign ";" | FunProto ";"
 i_member_decl:
   | "var" vs=var_sign ";"
-    { Ast.VarDecl(vs) $$ $loc }
+    { Ast.VarDecl(vs, None) $$ $loc }
   | fp=fun_proto ";"
     { Ast.FunDecl(fp) $$ $loc  }
 ;
@@ -180,7 +180,9 @@ fun_proto:
 // 9 - CMemberDecl ::= "var" VarSign ";"  | FunDecl
 c_member_decl:
   | "var" vs=var_sign ";"
-    { Ast.VarDecl(vs) $$ $loc }
+    { Ast.VarDecl(vs, None) $$ $loc }
+  | "var" vs=var_sign "=" e=expr ";"
+    { Ast.VarDecl(vs, Some(e)) $$ $loc }
   | fd=fun_decl
     { Ast.FunDecl(fd) $$ $loc }
 ;
@@ -203,7 +205,9 @@ block_line:
   | s=stmt
     { Ast.Stmt(s) $$ $loc }
   | "var" vs=var_sign ";"
-    { Ast.LocalDecl(vs) $$ $loc }
+    { Ast.LocalDecl(vs, None) $$ $loc }
+  | "var" vs=var_sign "=" e=expr ";"
+    { Ast.LocalDecl(vs, Some(e)) $$ $loc }
 ;
 
 

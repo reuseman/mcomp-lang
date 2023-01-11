@@ -82,7 +82,7 @@ and 'a stmt_node =
 and 'a stmtordec = ('a stmtordec_node, 'a) annotated_node
 
 and 'a stmtordec_node =
-  | LocalDecl of vdecl  (* Local variable declaration *)
+  | LocalDecl of vdecl * 'a expr option  (* Local variable declaration with optional initializer *)
   | Stmt of 'a stmt     (* A statement *)
 [@@deriving show, ord, eq]
 
@@ -100,7 +100,7 @@ and 'a member_decl = ('a member_decl_node, 'a) annotated_node
 and 'a member_decl_node =
   (* A member of an interface or of a component *)
   | FunDecl of 'a fun_decl
-  | VarDecl of vdecl
+  | VarDecl of vdecl * 'a expr option
 [@@deriving show, ord, eq]
 
 and 'a interface_decl = ('a interface_decl_node, 'a) annotated_node
@@ -161,11 +161,11 @@ type 'a top_decl =
 let annotate_node a b = { node = a; annot = b }
 
 (**
-  Check weather a type is a primitive type (e.g. int, bool, char)
+  Check weather a type is a primitive type (e.g. int, float, bool, char)
   @return True if the type is a primitive type, false otherwise.
 *)
 let is_primitive = function 
-| TInt | TBool | TChar -> true
+| TInt | TFloat | TBool | TChar -> true
 | _ -> false
 
 (**
@@ -229,3 +229,21 @@ let rec show_typ = function
   | TFun (args, ret) -> Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map show_typ args)) (show_typ ret)
   | TInterface i -> Printf.sprintf "interface %s" i
   | TComponent c -> Printf.sprintf "component %s" c
+
+
+let manglify_function fname args_type = 
+  let rec aux_serializer = function 
+  | TInt -> "i"
+  | TFloat -> "f"
+  | TBool -> "b"
+  | TChar -> "c"
+  | TArray (t, None) -> Printf.sprintf "%s[]" (aux_serializer t)
+  | TArray (t, Some n) -> Printf.sprintf "%s[]" (aux_serializer t)
+  | TRef t -> Printf.sprintf "%s" (aux_serializer t) (*TODO: think about it*)
+  | TVoid -> "v"   (*TODO: never right?*)
+  | _ -> failwith "Trying to manglify a not supported type"
+  in
+  let args_type_serialized = List.map aux_serializer args_type in
+  match args_type with 
+  | [] -> Printf.sprintf "N_%s_T_v" fname
+  | _ -> Printf.sprintf "N_%s_T_%s" fname (String.concat "_" args_type_serialized)

@@ -207,10 +207,27 @@ module Qualifier = struct
         Ast.AccIndex (vl, ve) ++ lvalue.annot
     | Ast.AccVar (Some interface, id) ->
         (* Add qualifier *)
+        print_endline ("Accessing interface: " ^ interface ^ " in the table for identifier " ^id);
         let component =
           if interface = "Prelude" then "Prelude"
-          else Hashtbl.find table interface
+          else if interface = current_cname then current_cname
+          else
+            try 
+            Hashtbl.find table interface
+          with Not_found -> 
+            let err_msg =
+              Printf.sprintf
+                "The interface '%s' is not provided by any component."
+                interface
+            in
+            let help_msg =
+              Printf.sprintf
+                "In connect add a new link '%s.%s <- %s.%s'" current_cname
+                interface "<ProvidingComponent>" interface
+            in
+            linking_error err_msg help_msg
         in
+
         Ast.AccVar (Some component, id) ++ lvalue.annot
 
   and visit_expr current_cname table expr =
@@ -246,9 +263,12 @@ module Qualifier = struct
           Ast.Call (Some(current_cname), i2, ve)
       | Ast.Call (Some interface, i2, exprs) ->
           (* Add qualifier *)
+          print_endline ("Calling interface: " ^ interface ^ " in the table");
           let component =
             if interface = "Prelude" then "Prelude"
-            else Hashtbl.find table interface
+            else if interface = current_cname then current_cname
+            else
+              Hashtbl.find table interface
           in
           let ve = List.map (visit_expr current_cname table) exprs in
           Ast.Call (Some component, i2, ve)
@@ -341,6 +361,14 @@ let wire_components ast =
 
   (* Check the semantic of the connections. *)
   let components_table = Checker.visit_links ct connections in
+
+  (* print table *)
+  print_endline "Components table:";
+  Hashtbl.iter
+    (fun k _ ->
+      print_endline (k ^ " -> " ^ ("string_of_component_data")))
+    components_table;
+
   (* Qualify the VarAcc and function Call by substituting the interface name with a concrete component. *)
   let qualified_components = Qualifier.visit_components components_table ct in
 

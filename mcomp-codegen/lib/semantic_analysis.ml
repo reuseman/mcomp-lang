@@ -109,7 +109,7 @@ module InterfaceVisitor = struct
   *)
   let is_function_return_type_legal rtype f_name loc = 
     match rtype with
-    | Ast.TInt | Ast.TBool | Ast.TChar | Ast.TVoid -> ()
+    | Ast.TInt | Ast.TFloat | Ast.TBool | Ast.TChar | Ast.TVoid -> ()
     | _ -> 
       let err_msg = Printf.sprintf "Function %s has an invalid return type '%s'." f_name (Ast.show_typ rtype) in
       let help_msg = Printf.sprintf "Change the return type to a valid one (e.g. int, bool, char, void)." in
@@ -170,16 +170,21 @@ module InterfaceVisitor = struct
     | Ast.FunDecl { rtype; fname; formals; _ } ->
       begin
         is_function_return_type_legal rtype fname loc;
-        let info = (fname, Ast.TFun (List.map snd formals, rtype), loc) in
+        let parameter_types = List.map snd formals in
+        let ftype = Ast.TFun (parameter_types, rtype) in
+        let info = (fname, ftype, loc) in
         let value = FunctionSymbol(info, Symbol_table.empty_table ()) in
+        let mangled_fname = Ast.manglify_function fname parameter_types in
+        print_endline ("FUNCTION_OVERLOADING - VISITING DECLARATION: " ^ fname);
+        print_endline ("mangled_name: " ^ mangled_fname);
         try
-          Symbol_table.add_entry fname value declarations_table
+          Symbol_table.add_entry mangled_fname value declarations_table
         with Symbol_table.DuplicateEntry(id) ->
           let err_msg = Printf.sprintf "The interface '%s' declared multiple times the function '%s'." i_name id in
           let help_msg = "Functions must have unique names. Rename it or remove it." in
           semantic_error loc err_msg help_msg
       end
-    | Ast.VarDecl (identifier, typ) ->
+    | Ast.VarDecl ((identifier, typ), _) ->
       begin
         is_variable_decl_legal identifier typ loc;
         let info = (identifier, typ, loc) in
@@ -281,9 +286,10 @@ module ComponentVisitor = struct
             semantic_error decl_loc err_msg help_msg
       end
     (* Check that the component defines the Function that has been declared in the interface and the signature matches *)
-    | FunctionSymbol((_, decl_type, decl_loc), _) ->
+    | FunctionSymbol((fname, decl_type, decl_loc), _) ->
       begin
         try
+          (* The name here is already mangled *)
           let def_symbol = Symbol_table.lookup decl_name definitions_table in
           begin
             match def_symbol with
@@ -301,8 +307,9 @@ module ComponentVisitor = struct
           end
         with 
           Symbol_table.NotFound(_) -> 
-            let err_msg = Printf.sprintf "Component '%s' provides the interface '%s', but the declared function '%s' in the interface is not defined in the component." c_name i_name decl_name in
-            let help_msg = Printf.sprintf "Define the function '%s' in the component '%s'." decl_name c_name in
+            let fsignature = Ast.show_typ decl_type in
+            let err_msg = Printf.sprintf "Component '%s' provides the interface '%s', but the declared function '%s' with signature '%s' in the interface is not defined in the component." c_name i_name fname fsignature in
+            let help_msg = Printf.sprintf "Define the function '%s' in the component '%s' with the proper signature." fname c_name in
             semantic_error decl_loc err_msg help_msg
       end
     | _ -> ignore_case 9 "In the declarations table only variables and functions are allowed."
@@ -361,9 +368,10 @@ module ComponentVisitor = struct
             let err_msg = Printf.sprintf "The variable '%s' in the component '%s' is already defined in the used interface '%s' as a function." decl_name c_name i_name in
             let help_msg = Printf.sprintf "Rename the variable '%s' in the component '%s'." decl_name c_name in
             semantic_error def_loc err_msg help_msg
-          | FunctionSymbol((_, _, def_loc), _) -> 
-            let err_msg = Printf.sprintf "The function '%s' in the component '%s' is already defined in the used interface '%s'." decl_name c_name i_name in
-            let help_msg = Printf.sprintf "Rename the function '%s' in the component '%s'." decl_name c_name in
+          | FunctionSymbol((fname, decl_symbol, def_loc), _) -> 
+            let fsignature = Ast.show_typ decl_symbol in
+            let err_msg = Printf.sprintf "The function '%s' with signature '%s' in the component '%s' is already defined in the used interface '%s'." fname fsignature c_name i_name in
+            let help_msg = Printf.sprintf "Rename the function '%s' in the component '%s'." fname c_name in
             semantic_error def_loc err_msg help_msg
           | _ -> ignore_case 5 "In the definitions table only variables and functions are allowed."
         with 
@@ -531,16 +539,19 @@ module ComponentVisitor = struct
       begin
         InterfaceVisitor.is_function_return_type_legal rtype fname loc;
         let function_table = List.fold_left (visit_formal loc) (Symbol_table.empty_table ()) formals in
-        let value = FunctionSymbol((fname, Ast.TFun (List.map snd formals, rtype), loc), function_table) in
+        let parameter_types = List.map snd formals in
+        let ftype = Ast.TFun (parameter_types, rtype) in
+        let value = FunctionSymbol((fname, ftype, loc), function_table) in
+        let mangled_fname = Ast.manglify_function fname parameter_types in
         try
-          Symbol_table.add_entry fname value definitions_table
+          Symbol_table.add_entry mangled_fname value definitions_table
         with
         | Symbol_table.DuplicateEntry(id) ->
           let err_msg = Printf.sprintf "The component '%s' defined multiple times the function '%s'." c_name id in
           let help_msg = "Functions must have unique names. Rename it or remove it." in
           semantic_error loc err_msg help_msg
       end
-    | Ast.VarDecl(identifier, typ) ->
+    | Ast.VarDecl((identifier, typ), _) ->
       begin
         InterfaceVisitor.is_variable_decl_legal identifier typ loc;
         let info = (identifier, typ, loc) in
@@ -711,13 +722,13 @@ module TypeAnalysis = struct
   (**
     Given an assignment of an expression to a lvalue,
     check weather the operation has expected type.
-    @param lvalue The lvalue to assign.
-    @param expr The expression to assign.
+    @param t1 The type of the lvalue to assing.
+    @param t2 The type of the expression to assign.
     @param loc The location of the expression.
     @raise SemanticError if the assignment is not valid.
   *)
-  let is_assignment_legal lvalue expr loc =
-    match (lvalue.annot, expr.annot) with
+  let is_assignment_legal t1 t2 loc =
+    match (t1, t2) with
     (* Same primitive type *)
     | t1, t2 when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
     (* Same primitive reference type *)
@@ -737,11 +748,11 @@ module TypeAnalysis = struct
       let help_msg = Printf.sprintf "Use a return statement to return a value." in
       semantic_error loc err_msg help_msg
     | _, _ -> 
-    let err_msg = Printf.sprintf "Cannot assign '%s' to '%s'." (Ast.show_typ expr.annot) (Ast.show_typ lvalue.annot) in
+    let err_msg = Printf.sprintf "Cannot assign '%s' to '%s'." (Ast.show_typ t1) (Ast.show_typ t2) in
     let help_msg = "The types of the left and right hand side of the assignment must be the same." in
     semantic_error loc err_msg help_msg
 
-
+  
   (**
     Given a type and a location, check weather the type is valid for the increment and decrement operators.
     @param t The type to check.
@@ -750,9 +761,9 @@ module TypeAnalysis = struct
   *)
   let is_inc_dec_valid t loc =
     match t with
-    | Ast.TInt -> ()
+    | Ast.TInt | Ast.TFloat -> ()
     | _ -> 
-      let err_msg = Printf.sprintf "The increment and decrement operators can only be applied to integers." in
+      let err_msg = Printf.sprintf "The increment and decrement operators can only be applied to integers or floats." in
       let help_msg = Printf.sprintf "You are using the operator on a '%s'." (Ast.show_typ t) in
       semantic_error loc err_msg help_msg
 
@@ -783,17 +794,29 @@ module TypeAnalysis = struct
     (* Check variable assignment *)
     | Ast.AccVar(Some(_), _) -> ignore_case 14 "The first optional identifier, must be defined here, in the second pass."
     | Ast.AccVar(None, id) ->
-      let (_, uses) = match component with Ast.ComponentDecl{ cname; uses; _ } -> (cname, uses) in
+      print_endline ("CHECKING: " ^ id);
+      let (cname, uses) = match component with Ast.ComponentDecl{ cname; uses; _ } -> (cname, uses) in
       let (uses_table, definitions_table) = match component_symbol with ComponentSymbol(_, uses, _, definitions_table) -> uses, definitions_table | _ -> ignore 18 in
       begin
         try
           (* 1. Check if access to a variable on the function scope *)
-          check_in_table None id function_table
+
+            if function_table == definitions_table then
+              begin
+              print_endline ("1 Checking in function table with SOME: " ^ id);
+              check_in_table (Some(cname)) id function_table
+              end
+            else
+              begin
+              print_endline ("1 Checking in function table with NONE: " ^ id);
+              check_in_table None id function_table
+              end
         with Symbol_table.NotFound(id) -> 
           begin
             try 
+              print_endline ("Checking in component table: " ^ id);
               (* 2. Check if access to a variable on the current component scope *)
-              check_in_table None id definitions_table
+              check_in_table (Some(cname)) id definitions_table
             with Symbol_table.NotFound(_) -> 
               (* 3. Check if access to a variable on any used interface *)
               let rec check_in_used_interface uses = 
@@ -803,6 +826,7 @@ module TypeAnalysis = struct
                   let interface_table = match interface_symbol with InterfaceSymbol(_, interface_table) -> interface_table | _ -> ignore 19 in
                   begin
                   try 
+                    print_endline ("Checking in interface table: " ^ interface_name ^ "." ^ id);
                     check_in_table (Some(interface_name)) id interface_table
                   with Symbol_table.NotFound(_) -> check_in_used_interface uses
                   end
@@ -863,7 +887,7 @@ module TypeAnalysis = struct
     | Ast.Assign(lvalue, expr) ->
       let tl = annotate_lvalue env lvalue in
       let te = annotate_expr env expr in
-      is_assignment_legal tl te loc;
+      is_assignment_legal tl.annot te.annot loc;
       Ast.Assign(tl, te) ++ tl.annot
     | Ast.AssignBinOp(lvalue, binop, expr) ->
       (* Get the real expression and check it
@@ -891,9 +915,9 @@ module TypeAnalysis = struct
       let te2 = annotate_expr env e2 in
       let binop_typ = is_binary_op_valid binop te1 te2 loc in 
       Ast.BinaryOp(binop, te1, te2) ++ binop_typ
-    | Ast.Call(_, i2, exprs) ->
+    | Ast.Call(_, fname, exprs) ->
       let te1 = List.map (annotate_expr env) exprs in
-      annotate_call env i2 te1 loc
+      annotate_call env fname te1 loc
     | Ast.IncDec(lvalue, inc_dec, pre_post) ->
       let tl = annotate_lvalue env lvalue in
       let typ = is_inc_dec_valid tl.annot loc in
@@ -910,10 +934,15 @@ module TypeAnalysis = struct
     @raise SemanticError if the call is not valid.
   *)
   and annotate_call env fname texprs loc = 
-    let (_, uses) = match env.component with Ast.ComponentDecl{ cname; uses; _ } -> (cname, uses) in
+    let (cname, uses) = match env.component with Ast.ComponentDecl{ cname; uses; _ } -> (cname, uses) in
     let component_symbol = env.component_symbol in
     let (uses_table, definitions_table) = match component_symbol with ComponentSymbol(_, uses_table, _, definitions_table) -> uses_table, definitions_table | _ -> ignore 20 in
     
+    let parameter_types = List.map (fun e -> e.annot) texprs in
+    let mangled_fname = Ast.manglify_function fname parameter_types in
+    print_endline ("the mangled function name is: "^ mangled_fname);
+
+
     let check_function iname function_info = 
       let (_, typ, _) = function_info in
       match typ with
@@ -962,7 +991,7 @@ module TypeAnalysis = struct
             let symbol = Symbol_table.lookup iname uses_table in
             match symbol with
             | InterfaceSymbol((_, _, _), declarations_table) -> 
-              check_in_table (Some(iname)) fname declarations_table
+              check_in_table (Some(iname)) mangled_fname declarations_table 
             | _ -> ignore_case 17 "In the uses table only interfaces are allowed."
           with
           | Symbol_table.NotFound(_) -> check_used_interfaces tail
@@ -975,7 +1004,7 @@ module TypeAnalysis = struct
 
     try 
       (* Check that the functoin is available in the definitions of the current component. *)
-      check_in_table None fname definitions_table
+      check_in_table (Some(cname)) mangled_fname definitions_table
     with
     | Symbol_table.NotFound(_) -> 
       (* If missing, check that the function is defined in one of the used interfaces. *)
@@ -1063,13 +1092,20 @@ module TypeAnalysis = struct
     let block_table = env.current_table in
     let loc = stmtordec.annot in
     match stmtordec.node with
-    | Ast.LocalDecl((id, typ)) -> 
+    | Ast.LocalDecl((id, typ), init) -> 
       begin
       InterfaceVisitor.is_variable_decl_legal id typ loc;
       try 
         let symbol = VarSymbol (id, typ, loc) in
         let _ = Symbol_table.add_entry id symbol block_table in
-        Ast.LocalDecl((id, typ)) ++ typ
+        let tinit = match init with 
+          | None -> None
+          | Some(e) -> 
+            let te = annotate_expr env e in 
+            is_assignment_legal typ te.annot loc;
+            Some(te)
+        in
+        Ast.LocalDecl((id, typ), tinit) ++ typ
       with Symbol_table.DuplicateEntry(_) ->
         let err_msg = Printf.sprintf "The variable '%s' is already defined." id in
         let help_msg = "Check the name of the variable or define it." in
@@ -1094,7 +1130,10 @@ module TypeAnalysis = struct
       | Ast.FunDecl{ rtype; fname; formals; body } ->
         let annotated_body = match body with 
           | Some(stmt) ->
-            let function_symbol = Symbol_table.lookup fname component_table in
+            let parameter_types = List.map snd formals in
+            let ftype = Ast.TFun(List.map snd formals, rtype) in
+            let mangled_fname = Ast.manglify_function fname parameter_types in
+            let function_symbol = Symbol_table.lookup mangled_fname component_table in
             let function_table = match function_symbol with FunctionSymbol(_, table) -> table | _ -> ignore 11 in
             let env = {current_table = function_table; component; component_symbol} in
             annotate_stmt env rtype stmt
@@ -1103,8 +1142,14 @@ module TypeAnalysis = struct
         let node = Ast.FunDecl{ rtype; fname; formals; body = Some(annotated_body) } in
         let annot = Ast.TFun(List.map snd formals, rtype) in
         node ++ annot
-      | Ast.VarDecl(id, typ) ->
-        Ast.VarDecl(id, typ) ++ typ
+      | Ast.VarDecl((id, typ), init) ->
+        let tinit = match init with 
+        | None -> None
+        | Some(e) -> 
+          let te = annotate_expr {current_table = component_table; component; component_symbol} e in
+          is_assignment_legal typ te.annot e.annot;
+          Some(te)
+        in Ast.VarDecl((id, typ), tinit) ++ typ
     in List.map annotate_definition definitions
 
 
@@ -1139,8 +1184,9 @@ module TypeAnalysis = struct
         let node = Ast.FunDecl{ rtype; fname; formals; body=None } in
         let annot = Ast.TFun(List.map snd formals, rtype) in
         node ++ annot
-      | Ast.VarDecl(id, typ) ->
-        Ast.VarDecl(id, typ) ++ typ
+      | Ast.VarDecl((id, typ), None) ->
+        Ast.VarDecl((id, typ), None) ++ typ
+      | _ -> ignore_case 13 "Interfaces can only have variables declarations without any initialization"
     in List.map annotate_declaration declarations 
 
   
@@ -1206,3 +1252,6 @@ let type_check ast =
 (* TODO: there is inconsitency with the help_msg, sometimes it's suggestion (do x) sometimes it's an error (expected y but it is z) *)
 (* TODO: can I remove identifier from identifier_info type? *)
 (* TODO: there is a bug with the location, if you have var arr : int, and var arr : void, it's going to talk about the latter but the pos will be the first one *)
+
+
+  (* TODO: check the initializer expression *)

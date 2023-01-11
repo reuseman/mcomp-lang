@@ -20,6 +20,7 @@ type global_context = {
   ll_module : L.llmodule;       (* LLVM module *)
   table : global_symbol_table;  (* Global symbols table *)
   cname : string option;        (* Name of the class *)
+  ctors:  L.llvalue * L.llbuilder;
 }
 
 type fun_context = {
@@ -65,7 +66,7 @@ let rec ast_to_llvm = function
 let var_init typ = L.undef (ast_to_llvm typ)
 
 (* https://en.wikipedia.org/wiki/Name_mangling *)
-let manglify component identifier = 
+let manglify_component component identifier = 
   let component = String.lowercase_ascii component in
   let identifier = String.lowercase_ascii identifier in
   "_" ^ component ^ "_" ^ identifier
@@ -101,7 +102,7 @@ let gen_unary_op uop typ e ll_builder =
       let gen_e1 = e1_generator fun_ctx in
       let gen_e2 = e2_generator fun_ctx in
       match (typ1, typ2) with
-      | (Ast.TInt, Ast.TInt) -> 
+      | _, _ when Ast.is_of_typ_or_reftyp Ast.TInt typ1 && Ast.is_of_typ_or_reftyp Ast.TInt typ2 ->
         begin
           match binop with
           (* Math operators *)
@@ -121,7 +122,7 @@ let gen_unary_op uop typ e ll_builder =
 
           | _ -> ignore_case 3 "gen_binary_op: boolean operators are handled elsewhere"
         end
-      | (Ast.TFloat, Ast.TFloat) ->
+      | _, _ when Ast.is_of_typ_or_reftyp Ast.TFloat typ1 && Ast.is_of_typ_or_reftyp Ast.TFloat typ2 ->
         begin
           match binop with 
           (* Float-Math operators *)
@@ -190,39 +191,6 @@ and gen_or_short_circuit fun_ctx left_e_generator right_e_generator =
 
   L.build_phi [(g_left_e, incoming_bb_1); (g_right_e, incoming_bb_2)] "t_phi_or_sc"
 
-(* and gen_and_short_circuit fun_ctx left_e right_e = 
-  let continue_block = L.append_block ll_ctx "and_sc_continue" fun_ctx.ll_value in
-  let end_block = L.append_block ll_ctx "and_sc_end" fun_ctx.ll_value in
-  
-  let g_left_e = gen_expr fun_ctx left_e in
-  let incoming_bb_1 = L.insertion_block fun_ctx.ll_builder in
-  (* If the left expression is true continue, otherwise jump to the end block *)
-  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_cond_br g_left_e continue_block end_block) in
-  L.position_at_end continue_block fun_ctx.ll_builder;
-  
-  let g_right_e = gen_expr fun_ctx right_e in
-  let incoming_bb_2 = L.insertion_block fun_ctx.ll_builder in
-  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_br end_block) in
-  L.position_at_end end_block fun_ctx.ll_builder;
-
-  L.build_phi [(g_left_e, incoming_bb_1); (g_right_e, incoming_bb_2)] "t_phi_and_sc"
-
-and gen_or_short_circuit fun_ctx left_e right_e = 
-  let continue_block = L.append_block ll_ctx "or_sc_continue" fun_ctx.ll_value in
-  let end_block = L.append_block ll_ctx "or_sc_end" fun_ctx.ll_value in
-  
-  let g_left_e = gen_expr fun_ctx left_e in
-  let incoming_bb_1 = L.insertion_block fun_ctx.ll_builder in
-  (* If the left expression is true jump to the end block, otherwise continue *)
-  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_cond_br g_left_e end_block continue_block) in
-  L.position_at_end continue_block fun_ctx.ll_builder;
-  
-  let g_right_e = gen_expr fun_ctx right_e in
-  let incoming_bb_2 = L.insertion_block fun_ctx.ll_builder in
-  let _ = add_ending_instruction fun_ctx.ll_builder (L.build_br end_block) in
-  L.position_at_end end_block fun_ctx.ll_builder;
-
-  L.build_phi [(g_left_e, incoming_bb_1); (g_right_e, incoming_bb_2)] "t_phi_or_sc"
 
 and gen_expr fun_ctx expr =
   match expr.node with
@@ -272,7 +240,9 @@ and gen_expr fun_ctx expr =
   | Ast.Call(Some(cname), fun_name, exprs) ->
     begin
     print_endline ("call: " ^ cname ^ "." ^ fun_name);
-    let mangled_name = if fun_name = "main" then fun_name else manglify cname fun_name in
+    let parameter_types = List.map (fun e -> e.annot) exprs in
+    let mangled_fname = Ast.manglify_function fun_name parameter_types in
+    let mangled_name = if fun_name = "main" then fun_name else manglify_component cname mangled_fname in
     let ll_fun = Symbol_table.lookup mangled_name fun_ctx.global_ctx.table.functions in
     let g_exprs = Array.of_list (List.map (gen_expr fun_ctx) exprs) in
     match expr.annot with 
@@ -285,7 +255,6 @@ and gen_expr fun_ctx expr =
      (* Get the lvalue *)
     let g_lvalue = gen_lvalue ~address:false ~load_value:false fun_ctx lvalue in
     let g_lvalue_value = L.build_load g_lvalue "t_load" fun_ctx.ll_builder in
-    let one = L.const_int int_type 1 in
     (* Apply increment or decrement to the value *)
     let g_result = match (lvalue.annot, inc_dec) with
     | Ast.TInt, Ast.Inc -> L.build_add g_lvalue_value llvm_one_i "t_inc" fun_ctx.ll_builder
@@ -306,7 +275,7 @@ and gen_lvalue ?(address=false) ?(load_value=false) ctx lvalue =
   let lookup cname id = match cname with
   | Some(cname) -> 
     (* Look up the mangled name in the global symbol table *)
-    let mangled_name = manglify cname id in
+    let mangled_name = manglify_component cname id in
     Symbol_table.lookup mangled_name ctx.global_ctx.table.variables
   | None -> 
     (* Look up the unmangled name in the current function's symbol table *)
@@ -317,17 +286,23 @@ and gen_lvalue ?(address=false) ?(load_value=false) ctx lvalue =
       (* TODO: i don't know why I here there coul be the case where the is no cname for a global variable *)
       (* If not found, look up the mangled name in the global symbol table *)
       let cname = match ctx.global_ctx.cname with | Some(cname) -> cname | None -> "" in
-      let mangled_name = manglify cname id in 
+      let mangled_name = manglify_component cname id in 
       Symbol_table.lookup mangled_name ctx.global_ctx.table.variables
     end
     in
 
   match lvalue.node with
   | Ast.AccVar(cname, id) -> 
-    print_endline ("gen_lvalue: AccVar: " ^ id);
+    match cname with
+    | Some(cname) -> 
+      print_endline ("gen_lvalue1: AccVar: " ^ cname ^ "." ^ id);
+    | None ->
+      print_endline ("gen_lvalue2: AccVar: " ^ id);
+    ;
     let var_sym = lookup cname id in
     (* Determine what to do based on the lvalue's type annotation *)
     begin
+      (* TODO: try to see what happens if I just return the address, maybe this could be helpfull for the lazy thing *)
     match lvalue.annot with
     | Ast.TRef(_) -> 
       (* If we need just the address of the reference, return it directly *)
@@ -347,7 +322,7 @@ and gen_lvalue ?(address=false) ?(load_value=false) ctx lvalue =
           address
 
     | Ast.TArray(_, Some _) -> 
-      Llvm.build_in_bounds_gep var_sym [| llvm_zero; llvm_zero |] "t_index_address" ctx.ll_builder
+      Llvm.build_in_bounds_gep var_sym [| llvm_zero_i; llvm_zero_i |] "t_index_address" ctx.ll_builder
 
     (* If the lvalue is a primitive type (not a reference) *)
     | _ -> 
@@ -368,7 +343,7 @@ and gen_lvalue ?(address=false) ?(load_value=false) ctx lvalue =
     match lvalue.annot with
     (* Arrays with a fixed size needs to be dereferences with a zero-index before using the next index to get the pointer *)
     | Ast.TArray(typ, Some(n)) -> 
-      let address = L.build_in_bounds_gep var_sym [| llvm_zero; g_index |] "t_index_address_bound" ctx.ll_builder in
+      let address = L.build_in_bounds_gep var_sym [| llvm_zero_i; g_index |] "t_index_address_bound" ctx.ll_builder in
       if load_value then
         match typ with
         | Ast.TRef(_) -> 
@@ -388,6 +363,24 @@ and gen_lvalue ?(address=false) ?(load_value=false) ctx lvalue =
       else
         address
     | _ -> ignore_case 6 "gen_lvalue: AccIndex: type not supported\n"
+
+
+let rec gen_expr_compile_time fun_ctx expr =
+  match expr.node with
+  | Ast.ILiteral(i) -> L.const_int int_type i
+  | Ast.CLiteral(c) -> L.const_int char_type (Char.code c)
+  | Ast.BLiteral(b) -> L.const_int bool_type (if b then 1 else 0)
+
+  | Ast.UnaryOp(uop, e) -> 
+    let g_e = gen_expr fun_ctx e in
+    gen_unary_op uop e.annot g_e fun_ctx.ll_builder
+
+  | Ast.BinaryOp(binop, e1, e2) ->
+    let e1_generator = fun fun_ctx -> gen_expr_compile_time fun_ctx e1 in
+    let e2_generator = fun fun_ctx -> gen_expr_compile_time fun_ctx e2 in
+    gen_binary_op binop e1.annot e2.annot e1_generator e2_generator fun_ctx
+
+  | _ -> ignore_case 1 "gen_expr_compile_time: only compile time expressions are supported"
 
 let rec gen_stmt fun_ctx stmt = 
   match stmt.node with
@@ -475,7 +468,7 @@ let rec gen_stmt fun_ctx stmt =
     (* Generate code for the loop condition that checks whether to continue the loop or exit *)
     let g_e2 = match e2 with
     | Some(e) -> gen_expr fun_ctx e
-    | None -> L.const_int int_type 1
+    | None -> llvm_one_i
     in
     (* let _ = L.build_cond_br g_e2 body continue fun_ctx.ll_builder in *)
     let _ = add_ending_instruction fun_ctx.ll_builder (L.build_cond_br g_e2 body continue) in
@@ -505,7 +498,7 @@ let rec gen_stmt fun_ctx stmt =
   | Ast.Return(None) ->
     add_ending_instruction fun_ctx.ll_builder (L.build_ret_void); false
   
-  | Ast.Return(Some(expr)) ->
+| Ast.Return(Some(expr)) ->
     add_ending_instruction fun_ctx.ll_builder (L.build_ret (gen_expr fun_ctx expr)); false
   | Ast.Block(stmtordec) -> 
     (* TODO: be aware of this, because in fundecl I already create a new block *)
@@ -525,12 +518,17 @@ let rec gen_stmt fun_ctx stmt =
 and gen_stmtordec fun_ctx stmtordec =
   match stmtordec.node with 
   | Ast.Stmt(stmt) ->  gen_stmt fun_ctx stmt
-  | Ast.LocalDecl((id, typ)) -> 
+  | Ast.LocalDecl((id, typ), init) -> 
     (* TODO: check weather it's an array with a fixed size *)
     (* Define a local variable *)
     let local_var = build_alloca typ id fun_ctx.ll_builder in
     (* initialize it *)
-    
+    let _ = match init with
+    | None -> L.build_store (var_init typ) local_var fun_ctx.ll_builder
+    | Some(expr) -> 
+      let g_e = gen_expr fun_ctx expr in
+      L.build_store g_e local_var fun_ctx.ll_builder
+    in
     (* Keep track of the local variable in the symbol table *)
     Symbol_table.add_entry id local_var fun_ctx.table |> ignore;
     true
@@ -579,7 +577,43 @@ let gen_vardecl ctx (id, typ) =
 let gen_definition ctx definition =
 match definition.node with
 | Ast.FunDecl(f) -> (gen_fundecl ctx f)
-| _ -> ()
+| Ast.VarDecl((id, typ), init) -> ()
+  (* let define_global_init_function = 
+    let fname = "_global_init_" in
+    let ftype = ast_to_llvm (Ast.TFun([], Ast.TVoid)) in
+    let ll_value = L.define_function fname ftype ctx.ll_module in
+    let ll_builder = L.builder_at_end ll_ctx (L.entry_block ll_value) in
+    let return = L.build_ret_void ll_builder in
+    (ll_value, ll_builder)
+    (* todo: set internal *)
+  in 
+
+
+  let value = var_init typ in 
+  let global_var = L.define_global id value ctx.ll_module in 
+  let _ = Symbol_table.add_entry id value ctx.table.variables in 
+  let init_builder = L.builder_at_end ll_ctx (L.entry_block global_var) in
+  let fun_ctx = {ll_builder = init_builder; ll_value = global_var; table = ctx.table.variables; global_ctx = ctx; return_type = typ} in
+  (* initialize it *)
+
+
+  let _ = match init with
+    | None -> L.build_store (var_init typ) global_var fun_ctx.ll_builder
+    | Some(expr) -> 
+      let g_e = gen_expr fun_ctx expr in
+      L.build_store g_e global_var fun_ctx.ll_builder
+    in
+    () *)
+(* 
+
+let local_var = build_alloca typ id fun_ctx.ll_builder in
+(* initialize it *)
+let _ = match init with
+| None -> L.build_store (var_init typ) local_var fun_ctx.ll_builder
+| Some(expr) -> 
+  let g_e = gen_expr fun_ctx expr in
+  L.build_store g_e local_var fun_ctx.ll_builder
+in *)
 
 let gen_component ctx component =
   match component.node with
@@ -606,19 +640,47 @@ let declare_member ctx cname member =
   let node = match member.node with
   | Ast.FunDecl f ->
       let ll_typ = ast_to_llvm member.annot in
-      let mangled_name = if f.fname = "main" then f.fname else manglify cname f.fname in
+      let parameter_types = List.map (fun (id, typ) -> typ) f.formals in
+      (* TODO: overloading *)
+      let mangled_fname = Ast.manglify_function f.fname parameter_types in
+      (* print_endline ("mangled fname during declare_member is : " ^ mangled_fname); *)
+      let mangled_name = if f.fname = "main" then f.fname else manglify_component cname mangled_fname in
       let ll_fun = L.define_function mangled_name ll_typ ctx.ll_module in
       Symbol_table.add_entry mangled_name ll_fun ctx.table.functions |> ignore;
-
       Ast.FunDecl {f with fname = mangled_name}
 
-  | Ast.VarDecl (id, typ) ->
-      let mangled_name = manglify cname id in
-      let ll_init = var_init typ in
-      let ll_var = L.define_global mangled_name ll_init ctx.ll_module in
+  | Ast.VarDecl((id, typ), init) ->
+      let mangled_name = manglify_component cname id in
+
+      print_endline ("mangled name is : " ^ mangled_name);
+
+      (* THIS IS THE INIT WORK
+      let define_global_init_function = 
+        let fname = "_global_init_" in
+        let ftype = ast_to_llvm (Ast.TFun([], Ast.TVoid)) in
+        let ll_value = L.define_function fname ftype ctx.ll_module in
+        let ll_builder = L.builder_at_end ll_ctx (L.entry_block ll_value) in
+        let return = L.build_ret_void ll_builder in
+        let _ = L.position_before return ll_builder in
+        (ll_value, ll_builder)
+        (* todo: set internal *)
+      in *)
+
+
+      let (ll_value, ll_builder) = ctx.ctors in 
+      let ll_var = L.define_global mangled_name (var_init typ) ctx.ll_module in
+
+      let _ = match init with
+      | None -> var_init typ
+      | Some(expr) -> 
+        let fun_ctx = {ll_builder = ll_builder; ll_value = ll_value; table = Symbol_table.empty_table (); global_ctx = ctx; return_type = Ast.TVoid} in
+        let g_expr = gen_expr fun_ctx expr in 
+        L.build_store g_expr ll_var fun_ctx.ll_builder
+      in
       Symbol_table.add_entry mangled_name ll_var ctx.table.variables |> ignore;
 
-      Ast.VarDecl (mangled_name, typ)
+
+      Ast.VarDecl ((mangled_name, typ), init) (*TODO: init*)
   in {member with node}
 
 let declare_component ctx component =
@@ -633,26 +695,55 @@ let declare_component ctx component =
   
 (* This defines a symbol with the original name (e.g. print) but the symbol table will have prelude_print*)
 let declare_function ctx cname (fname, ftyp) =
-  let mangled_name = manglify cname fname in
+  let parameter_types = match ftyp with Ast.TFun (p, _) -> p | _ -> [] in
+  let mangled_fname = Ast.manglify_function fname parameter_types in
+  let mangled_name = manglify_component cname mangled_fname in
   let ll_fun = L.declare_function mangled_name (ast_to_llvm ftyp) ctx.ll_module in
   Symbol_table.add_entry mangled_name ll_fun ctx.table.functions |> ignore
 
+
+let emit_global_constructor current_module = 
+  (* TODO: change everything *)
+  (* See: https://llvm.org/docs/LangRef.html#the-llvm-global-ctors-global-variable *)
+
+  let lltype_void_function = Llvm.function_type void_type [||] in
+  let lltype_ptr_void_function = Llvm.pointer_type lltype_void_function in
+  let lltype_ptr_char = Llvm.pointer_type (L.i8_type ll_ctx) in
+
+  let fname =  "_MUCOMP__global_ctors" in
+  let ftyp = ast_to_llvm (Ast.TFun([], Ast.TVoid)) in
+  let fun_priority = Llvm.const_int int_type 65535 in
+  let fun_decl = Llvm.define_function fname ftyp current_module in
+  ignore(Llvm.set_linkage Llvm.Linkage.Internal fun_decl);
+  let fbuilder = Llvm.builder_at_end ll_ctx (Llvm.entry_block fun_decl) in
+  let ret_inst = (Llvm.build_ret_void fbuilder) in
+
+  let constructor_type = Llvm.struct_type ll_ctx [|int_type; lltype_ptr_void_function; lltype_ptr_char|] in 
+  let global_init_constructor = Llvm.const_struct ll_ctx [|fun_priority; fun_decl; Llvm.const_null lltype_ptr_char|] in
+  let constructor_array = Llvm.const_array constructor_type [|global_init_constructor|] in 
+  let global_ctors = Llvm.define_global "llvm.global_ctors" constructor_array current_module in
+  ignore(Llvm.set_linkage Llvm.Linkage.Appending global_ctors);
+  ignore(Llvm.position_before ret_inst fbuilder);
+  (fun_decl, fbuilder)
+    
+
 let to_llvm_module ast =
   print_endline "\n====================VISIT====================";
-
+  
   let components =
     match ast with
     | Ast.CompilationUnit { interfaces = _; components = co; _ } -> co
   in
   let llmodule = L.create_module ll_ctx "mcomp_global" in
+  let ctors = emit_global_constructor llmodule in 
   let global_table =
     {
       functions = Symbol_table.empty_table ();  
       variables = Symbol_table.empty_table ();
-    }
-  in
-  let fun_table = Symbol_table.empty_table () in
-  let ctx = { ll_module = llmodule; table = global_table; cname = None;} in
+      }
+    in
+    let fun_table = Symbol_table.empty_table () in
+    let ctx = { ll_module = llmodule; table = global_table; cname = None; ctors} in
 
   let _ =
     List.iter (declare_function ctx "prelude") Mcomp_stdlib.prelude_signature
