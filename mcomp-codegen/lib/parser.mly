@@ -64,6 +64,9 @@
 %nonassoc LT GT LE GE 
 %left PLUS MINUS
 %left TIMES DIV MOD
+
+%right MINUSMINUS
+
 %nonassoc NEG // unary minus
 %nonassoc NOT
 
@@ -297,8 +300,13 @@ expr:
     { Ast.IncDec(lv, Ast.Inc, Ast.Pre) $$ $loc }
   | lv=l_value "++"
     { Ast.IncDec(lv, Ast.Inc, Ast.Post) $$ $loc }
-  | "--" lv=l_value
-    { Ast.IncDec(lv, Ast.Dec, Ast.Pre) $$ $loc }
+  | "--" e=expr
+    { 
+      match e.node with
+      | Ast.LV(lv) -> Ast.IncDec(lv, Ast.Dec, Ast.Pre) $$ $loc
+      | _ -> 
+        let unary_op = Ast.UnaryOp(Ast.Neg, e) $$ $loc in
+        Ast.UnaryOp(Ast.Neg, unary_op) $$ $loc}
   | lv=l_value "--"
     { Ast.IncDec(lv, Ast.Dec, Ast.Post) $$ $loc }
 ;
