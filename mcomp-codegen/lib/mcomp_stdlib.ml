@@ -18,6 +18,9 @@ let prelude_signature = [
   "getfloat", TFun([], TFloat);
   "getbool", TFun([], TBool);
   "getchar", TFun([], TChar);
+
+  "int_to_float", TFun([TInt], TFloat);
+  "float_to_int", TFun([TFloat], TInt);
 ]
 
 let app_signature = [

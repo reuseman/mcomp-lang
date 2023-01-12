@@ -6,13 +6,14 @@
 //    _prelude_ prefix, that is the name of the mangling scheme used for the components
 //    _n_{function_name}_t_{type} suffix, that is the name of the mangling scheme used to support overloaded functions
 
+
 // Print newline
 void _prelude_n_print_t_i(int n){
   printf("%d\n", n);
 }
 
 void _prelude_n_print_t_f(float n){
-  printf("%0.4f\n", n);
+  printf("%0.2f\n", n);
 }
 
 void _prelude_n_print_t_b(bool n){
@@ -42,6 +43,7 @@ void _prelude_n_put_t_c(char n){
 }
 
 
+// Get primitive
 int _prelude_n_getint_t_v(){
     char buffer[32];
     if(fgets(buffer, 32, stdin) == NULL)
@@ -71,6 +73,14 @@ bool _prelude_n_getbool_t_v(){
     if(fgets(buffer, 32, stdin) == NULL)
       return false;
     return buffer[0] == 't' || buffer[0] == 'T';
+}
+
+float _prelude_n_int_to_float_t_i(int n){
+  return (float) n;
+}
+
+int _prelude_n_float_to_int_t_f(float n){
+  return (int) n;
 }
 
 // command to compile with clang and produce bit code
