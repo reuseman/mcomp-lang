@@ -230,20 +230,3 @@ let rec show_typ = function
   | TInterface i -> Printf.sprintf "interface %s" i
   | TComponent c -> Printf.sprintf "component %s" c
 
-
-let manglify_function fname args_type = 
-  let rec aux_serializer = function 
-  | TInt -> "i"
-  | TFloat -> "f"
-  | TBool -> "b"
-  | TChar -> "c"
-  | TArray (t, None) -> Printf.sprintf "%s[]" (aux_serializer t)
-  | TArray (t, Some n) -> Printf.sprintf "%s[]" (aux_serializer t)
-  | TRef t -> Printf.sprintf "%s" (aux_serializer t) (*TODO: think about it*)
-  | TVoid -> "v"   (*TODO: never right?*)
-  | _ -> failwith "Trying to manglify a not supported type"
-  in
-  let args_type_serialized = List.map aux_serializer args_type in
-  match args_type with 
-  | [] -> Printf.sprintf "N_%s_T_v" fname
-  | _ -> Printf.sprintf "N_%s_T_%s" fname (String.concat "_" args_type_serialized)
