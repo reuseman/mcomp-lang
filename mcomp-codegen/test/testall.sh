@@ -10,7 +10,12 @@ test-if1.mc test-if2.mc test-if3.mc test-if4.mc test-if5.mc test-if6.mc test-loc
 test-var1.mc test-var2.mc test-while1.mc test-while2.mc test-ex1.mc test-ex2.mc test-ex3.mc test-ex4.mc test-ex5.mc test-ex6.mc test-ex8.mc test-ex9.mc test-ex10.mc test-ex11.mc test-ex11count.mc \
 test-ex12.mc test-ex13.mc test-ex14.mc test-ex15.mc test-ex16.mc test-ex17.mc test-ex18.mc \
 test-ex19.mc test-ex20.mc test-ex21.mc test-ex22.mc test-ex23.mc test-ex24.mc test-ex25.mc \
-test-sort1.mc test-sort2.mc test-sort3.mc test-sort4.mc"
+test-sort1.mc test-sort2.mc test-sort3.mc test-sort4.mc \
+test-extension-arith1.mc test-extension-arith2.mc test-extension-arith3.mc test-extension-assignment-operator1.mc \
+test-extension-assignment-operator2.mc test-extension-assignment-operator3.mc test-extension-dowhile1.mc \ 
+test-extension-dowhile2.mc test-extension-dowhile3.mc test-extension-incdec1.mc test-extension-incdec2.mc \
+test-extension-incdec3.mc test-extension-incdec4.mc test-extension-overload1.mc test-extension-overload2.mc"
+
 
 files=$(cd $testfolder; ls test-*.mc)
 
