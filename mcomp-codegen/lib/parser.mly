@@ -46,7 +46,7 @@
 %token CONNECT "connect"
 
 %token DEF "def"  VAR "var"     RETURN "return"
-%token IF "if"    ELSE "else"   FOR "for"         WHILE "while"
+%token IF "if"    ELSE "else"   FOR "for"         WHILE "while"       DO "do"
 
 // Types
 %token TYPE_INT "int"   TYPE_FLOAT "float"   TYPE_CHAR "char"  TYPE_VOID "void"  TYPE_BOOL "bool"
@@ -248,6 +248,8 @@ stmt:
     { b }
   | "while" "(" e=expr ")" s=stmt
     { Ast.While(e, s) $$ $loc }
+  | "do" s=stmt "while" "(" e=expr ")" ";"
+    { Ast.DoWhile(e, s) $$ $loc }
   | "if" "(" e=expr ")" s1=stmt "else" s2=stmt
     { Ast.If(e, s1, s2) $$ $loc }
   | "if" "(" e=expr ")" s1=stmt %prec NO_ELSE

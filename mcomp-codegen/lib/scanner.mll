@@ -29,6 +29,7 @@
       ("else",       ELSE);
       ("for",        FOR);
       ("while",      WHILE);
+      ("do",         DO);
       ("int",        TYPE_INT);
       ("float",      TYPE_FLOAT);
       ("char",       TYPE_CHAR);
