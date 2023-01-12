@@ -69,7 +69,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.mcomp",
-					"match": "\\b(?:component|connect|provides|uses|interface|component|connect|if|else|while|for|return|continue|def|var)\\b"
+					"match": "\\b(?:component|connect|provides|uses|interface|component|connect|if|else|do|while|for|return|continue|def|var)\\b"
 				}
 			]
 		},
@@ -131,7 +131,7 @@
 			"patterns": [
 				{
 					"name": "constant.numeric.mcomp",
-					"match": "\\b\\d+\\b"
+					"match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
 				}
 			]
 		},
