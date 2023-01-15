@@ -156,13 +156,17 @@ rule next_token = parse
 
 (* Char helpers *)
 and character = parse 
+  (* Raise an error if the apostrophe has been opened, but immediately after there is the EOF, the newline or again the apostrophe *)
   | eof | newline | "\'" { raise_syntax_error lexbuf "Syntax error: The Char must be closed with a \"'\"." }
+  (* Otherwise, parse the character and then check if it's closed *)
   | "" { let c = CHAR_VALUE(character_parser lexbuf) in character_close lexbuf; c}
 
 and character_close = parse
   | "\'" {  }
   | _ {raise_syntax_error lexbuf ("Syntax error: The Char is closed with an invalid character. It must be a \"'\".")}
 
+(* For special characters the escape is needed, so that the Ocaml compilers know
+ that they should be treated as characters rather than a control command *)
 and character_parser = parse 
   | "\\'"   { '\''    }
   | "\""    { '\"'    }
@@ -180,7 +184,7 @@ and character_parser = parse
 
 (* Comment helpers *)
 and single_line_comment = parse
-  | newline { next_token lexbuf }
+  | newline { Lexing.new_line lexbuf; next_token lexbuf }
   | eof     { EOF }
   | _       { single_line_comment lexbuf }
 
