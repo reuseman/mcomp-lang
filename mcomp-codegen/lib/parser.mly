@@ -51,19 +51,30 @@
 // Types
 %token TYPE_INT "int"   TYPE_FLOAT "float"   TYPE_CHAR "char"  TYPE_VOID "void"  TYPE_BOOL "bool"
 
-/* Precedence and associativity specification */
+
+/*  Precedence and associativity specification
+
+    For the precedence, the priority is implicitly determined
+    by the order of declaration. The lower is declared, the higher the priority.
+ */
 %nonassoc NO_ELSE
 %nonassoc ELSE
 
 %right ASSIGN PLUS_ASSIGN MINUS_ASSIGN TIMES_ASSIGN DIV_ASSIGN MOD_ASSIGN
+// Assignment is done from right to left, so x = y = z is equivalent to x = (y = z)
 
 %left OR
 %left AND
+// OR and AND are left-associative, so a || b || c is equivalent to (a || b) || c
 
 %left EQ NE
+
 %nonassoc LT GT LE GE 
+// Comparison is not associative, so a < b < c needs be writtena as (a < b) && (b < c)
+
 %left PLUS MINUS
 %left TIMES DIV MOD
+// a + b * c is equivalent to a + (b * c) because of the priority
 
 %right MINUSMINUS
 
@@ -250,9 +261,11 @@ stmt:
     { Ast.While(e, s) $$ $loc }
   | "do" s=stmt "while" "(" e=expr ")" ";"
     { Ast.DoWhile(e, s) $$ $loc }
+
+  // According to the precedence priority, first try to match the "if-else" rule, otherwise match the "if" rule
   | "if" "(" e=expr ")" s1=stmt "else" s2=stmt
     { Ast.If(e, s1, s2) $$ $loc }
-  | "if" "(" e=expr ")" s1=stmt %prec NO_ELSE
+  | "if" "(" e=expr ")" s1=stmt %prec NO_ELSE  // the prec here forces the precedence level of the production rule to be the one of the NO_ELSE, rathen then the precedence of the rightmost terminal symbol
     { Ast.If(e, s1, Ast.Skip $$ $loc) $$ $loc }
   | "for" "(" e1=expr? ";" e2=expr? ";" e3=expr? ")" s=stmt
     { Ast.For(e1, e2, e3, s) $$ $loc }
