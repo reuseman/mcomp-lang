@@ -954,7 +954,10 @@ module TypeAnalysis = struct
   and annotate_constant_expr env expr =
     let loc = expr.annot in
     match expr.node with
-    | Ast.ILiteral(_) | Ast.FLiteral(_) | Ast.BLiteral(_) | Ast.CLiteral(_) -> annotate_expr env expr
+    | Ast.ILiteral(i) -> Ast.ILiteral(i) ++ Ast.TInt
+    | Ast.FLiteral(f) -> Ast.FLiteral(f) ++ Ast.TFloat
+    | Ast.CLiteral(c) -> Ast.CLiteral(c) ++ Ast.TChar
+    | Ast.BLiteral(b) -> Ast.BLiteral(b) ++ Ast.TBool
     | Ast.UnaryOp(uop, exp) -> 
       let te = annotate_constant_expr env exp in
       let typ = is_unary_op_valid uop te expr.annot in Ast.UnaryOp(uop, te) ++ typ
@@ -986,7 +989,7 @@ module TypeAnalysis = struct
     
     let parameter_types = List.map (fun e -> e.annot) texprs in
     let parameters_signature = (String.concat ", " (List.map Ast.show_typ parameter_types)) in
-    let mangled_fname = Utils.manglify_function fname parameter_types in
+    let mangled_fname = Utils.manglify_function ~enable_ref:false fname parameter_types in
 
     let check_function iname function_info = 
       let (_, typ, _) = function_info in
@@ -1003,6 +1006,7 @@ module TypeAnalysis = struct
             | a :: arguments, p :: parameters when Ast.equal_typ a p -> check_arguments arguments parameters (counter + 1)
             | Ast.TRef(a) :: arguments, p :: parameters when Ast.equal_typ a p -> check_arguments arguments parameters (counter + 1)
             | a :: _, p :: _ when not (Ast.equal_typ a p) -> 
+              (* TODO: edit this approach, because with the addition of support for function overloading, it's not an helpful message anymore *)
               let err_msg = Printf.sprintf "The argument n. %d has the wrong type." counter in
               let help_msg = Printf.sprintf "The provided argument has type '%s', but the parameter has an expected type '%s'." (Ast.show_typ a) (Ast.show_typ p) in
               semantic_error loc err_msg help_msg
@@ -1187,6 +1191,15 @@ module TypeAnalysis = struct
         let annot = Ast.TFun(List.map snd formals, rtype) in
         node ++ annot
       | Ast.VarDecl((id, typ), init) ->
+        (* Initialization must work only with primitive types *)
+        let _ = match typ, init with 
+        | _, Some(_) when Ast.is_primitive typ -> ()
+        | _, Some(_) -> 
+          let err_msg = Printf.sprintf "The initialization of variables work only with primitive types." in
+          let help_msg = Printf.sprintf "The type of '%s' is '%s' that is not primitive." id (Ast.show_typ typ) in
+          semantic_error definition.annot err_msg help_msg;
+        | _, None -> ()
+        in
         let env = {current_table = component_table; component; component_symbol} in
         (* Allow only constant expressions initialization for the global variables *)
           let tinit = Option.map (annotate_constant_expr env) init
