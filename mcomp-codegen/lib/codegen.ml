@@ -585,12 +585,13 @@ module Codegen = struct
     | Ast.LocalDecl((id, typ), init) -> 
       (* Define a local variable *)
       let local_var = build_alloca typ id fun_ctx.ll_builder in
-      (* Initialize the variable with an undef value or with the optionally provided expression. *)
-      let value = match init with 
-      | None -> var_init typ
-      | Some(expr) -> gen_expr fun_ctx expr
+      (* Initialize the variable with the optionally provided expression. *)
+      let _ = match init with 
+      | None -> ()
+      | Some(expr) -> 
+        let value = gen_expr fun_ctx expr in
+        L.build_store value local_var fun_ctx.ll_builder |> ignore;
       in
-      L.build_store value local_var fun_ctx.ll_builder |> ignore;
       (* Keep track of the local variable in the symbol table *)
       Symbol_table.add_entry id local_var fun_ctx.table |> ignore;
     true
@@ -715,11 +716,11 @@ module Declare = struct
         let ll_var = L.define_global mangled_name (var_init typ) ctx.ll_module in
       
         let _ = match init with
-        | None -> var_init typ
+        | None -> ()
         | Some(expr) -> 
           let fun_ctx = {ll_builder = ll_builder; ll_value = ll_value; table = Symbol_table.empty_table (); global_ctx = ctx;} in
           let g_expr = Codegen.gen_expr fun_ctx expr in 
-          L.build_store g_expr ll_var fun_ctx.ll_builder
+          L.build_store g_expr ll_var fun_ctx.ll_builder |> ignore
         in
         Symbol_table.add_entry mangled_name ll_var ctx.table.variables |> ignore;
 
