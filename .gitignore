@@ -30,3 +30,10 @@ _opam/
 
 # vscode configuration
 .vscode/
+node_modules
+
+temp/*
+artifacts/
+
+# ignore all files in th e folder /benchmark ending with .out
+.out

@@ -209,7 +209,7 @@ module InterfaceVisitor = struct
       let help_msg = Printf.sprintf "Add a 'int' size to the array definition (e.g. var %s : %s[13])." identifier (Ast.show_typ typ) in
       semantic_error loc err_msg help_msg
     (* Forbid reference variable to a non-primitive type -> var my_var: &void *)
-    | Ast.TRef(typ) when not(Ast.is_primitive typ) ->
+    | Ast.TRef(typ, _) when not(Ast.is_primitive typ) ->
       let err_msg = Printf.sprintf "Variable '%s' cannot be a reference to a non-primitive type." identifier in
       let help_msg = "References can only be used with primitive types (i.e. int, bool, char)." in
       semantic_error loc err_msg help_msg
@@ -540,63 +540,6 @@ module ComponentVisitor = struct
       semantic_error loc err_msg help_msg
   
 
-  (** 
-    Given a formal parameter of a function and the function symbol table,
-    checks that the type is a valid one and that the parameter is not already defined.
-    @param loc the location of the formal parameter
-    @param function_table the symbol table of the function
-    @param formal the formal parameter to check
-    @return the updated function table
-    @raise Semantic_error if the formal parameter is not valid or already defined
-  *)
-  let visit_formal loc function_table formal =
-    let (identifier, typ) = formal in
-    match typ with
-    (* Forbid parameters with void type ->                             def example(my_par : void, ...) *)
-    | Ast.TVoid ->
-      let err_msg = Printf.sprintf "The parameter '%s' cannot have type 'void'." identifier in
-      let help_msg = "'void' can only be used as a return type of a function." in
-      semantic_error loc err_msg help_msg
-    (* Forbid parameters with arrays of void type ->                   def example(my_par : void[], ...) *)
-    | Ast.TArray(Ast.TVoid, _) ->
-      let err_msg = Printf.sprintf "The parameter '%s' cannot have type 'void[]'." identifier in
-      let help_msg = "'void' can only be used as a return type of a function." in
-      semantic_error loc err_msg help_msg
-    (* Forbid parameter with multi-dimensional arrays of any type ->   def example(my_par : int[][][], ...) *)
-    | Ast.TArray(Ast.TArray(_, _), _) ->
-      let err_msg = Printf.sprintf "The parameter '%s' cannot have a multi-dimensional array type." identifier in
-      let help_msg = "Multi-dimensional arrays are not supported." in
-      semantic_error loc err_msg help_msg
-    (* Forbid parameters with arrays of a fixed size ->                def example(my_par : int[5], ...) *)
-    | Ast.TArray(_, Some(n)) ->
-      let err_msg = Printf.sprintf "The parameter '%s' is a reference to an array with a fixed size." identifier in
-      let help_msg = Printf.sprintf "Size is not needed. Remove the size '%d' in the brackets." n in
-      semantic_error loc err_msg help_msg
-    (* Forbid parameters with a non primitive reference ->             def example(my_par : &void, ...) *)
-    | Ast.TRef(typ) when not(Ast.is_primitive typ) ->
-      let err_msg = Printf.sprintf "Variable '%s' cannot be a reference to a non-primitive type." identifier in
-      let help_msg = "References can only be used with primitive types (i.e. int, bool, char)." in
-      semantic_error loc err_msg help_msg
-    (* Forbid parameters with a non primitive reference ->             def example(my_par : &int[], ...) *)
-    | Ast.TArray(Ast.TRef(_), _) -> 
-      let err_msg = Printf.sprintf "Variable '%s' cannot be a reference to an array." identifier in
-      let help_msg = "References can only be used with primitive types (i.e. int, bool, char)." in
-      semantic_error loc err_msg help_msg
-    | _ ->
-      (* Check if already defined in the function parameter list *)
-      begin
-        let info = (identifier, typ, loc) in
-        let value = VarSymbol(info) in
-        try 
-          Symbol_table.add_entry identifier value function_table
-        with
-        | Symbol_table.DuplicateEntry(id) ->
-          let err_msg = Printf.sprintf "The parameter '%s' is declared more than once." id in
-          let help_msg = "Remove the duplicates in the parameters list." in
-          semantic_error loc err_msg help_msg
-      end
-
-
   (**
     Given a definition (e.g. variable or function) of a component and the definition
     table, check it and add it to the definition table to keep track of it.
@@ -815,11 +758,11 @@ module TypeAnalysis = struct
     (* Same primitive type *)
     | t1, t2 when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
     (* Same primitive reference type *)
-    | Ast.TRef(t1), Ast.TRef(t2) when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
+    | Ast.TRef(t1, _), Ast.TRef(t2, _) when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
     (* Left primitive reference type and right primitive type *)
-    | Ast.TRef(t1), t2 when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
+    | Ast.TRef(t1, _), t2 when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
     (* Right primitive type and left primitive reference type *)
-    | t1, Ast.TRef(t2) when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
+    | t1, Ast.TRef(t2, _) when (Ast.equal_typ t1 t2) && (Ast.is_primitive t1) -> ()
     (* Forbid array assignment *)
     | Ast.TArray(_), Ast.TArray(_) -> 
       let err_msg = Printf.sprintf "Array assignment is not supported yet." in
@@ -923,7 +866,7 @@ module TypeAnalysis = struct
         begin
           let tl = annotate_lvalue env l in
           match tl.annot with 
-          | Ast.TArray(Ast.TRef(typ), _) ->
+          | Ast.TArray(Ast.TRef(typ, _), _) ->
             if Ast.is_primitive(typ) then
               Ast.AccIndex(tl, te) ++ typ
             else 
@@ -986,7 +929,7 @@ module TypeAnalysis = struct
       let typ = is_unary_op_valid uop te loc in Ast.UnaryOp(uop, te) ++ typ
     | Ast.Address(lvalue) -> 
       let tl = annotate_lvalue env lvalue in
-      Ast.Address(tl) ++ Ast.TRef(tl.annot)
+      Ast.Address(tl) ++ Ast.TRef(tl.annot, true)   (* This is an address, so it's true *)
     | Ast.BinaryOp(binop, e1, e2) ->
       let te1 = annotate_expr env e1 in
       let te2 = annotate_expr env e2 in
@@ -1046,7 +989,9 @@ module TypeAnalysis = struct
     
     let parameter_types = List.map (fun e -> e.annot) texprs in
     let parameters_signature = (String.concat ", " (List.map Ast.show_typ parameter_types)) in
-    let mangled_fname = Utils.manglify_function ~enable_ref:false fname parameter_types in
+    let mangled_fname = Utils.manglify_function ~is_call:true fname parameter_types in
+
+    (* Check if the function is defined in the current component *)
 
     let check_function iname function_info = 
       let (_, typ, _) = function_info in
@@ -1061,7 +1006,7 @@ module TypeAnalysis = struct
             match arguments, parameters with
             | [], [] -> ()
             | a :: arguments, p :: parameters when Ast.equal_typ a p -> check_arguments arguments parameters (counter + 1)
-            | Ast.TRef(a) :: arguments, p :: parameters when Ast.equal_typ a p -> check_arguments arguments parameters (counter + 1)
+            | Ast.TRef(a, _) :: arguments, p :: parameters when Ast.equal_typ a p -> check_arguments arguments parameters (counter + 1)
             | a :: _, p :: _ when not (Ast.equal_typ a p) -> 
               (* TODO: edit this approach, because with the addition of support for function overloading, it's not an helpful message anymore *)
               let err_msg = Printf.sprintf "The argument n. %d has the wrong type." counter in

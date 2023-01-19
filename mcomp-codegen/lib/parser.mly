@@ -231,7 +231,7 @@ complex_type:
   | ct=complex_type size=delimited("[", INT_VALUE, "]")
     { Ast.TArray(ct, Some size) }
   | "&" bt=basic_type
-    { Ast.TRef(bt)  }
+    { Ast.TRef(bt, false)  }
 ;
 
 
