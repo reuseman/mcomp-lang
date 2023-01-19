@@ -21,22 +21,22 @@ The project is made of four assignments that are released incrementally during t
 
 ## An introduction to µcomp-lang
 
-An high-level overview of the language is [here](docs/assignment/OVERVIEW.md).
+An high-level overview of the language is [here](OVERVIEW.md).
 
 ## Setup your development environment
 
-A description of the provided project kit is [here](docs/assignment/SETUP.md).
+A description of the provided project kit is [here](SETUP.md).
 
 ## µcomp-lang assignments
 
 The project is split in the following assignments:
 
-* **Parsing**: this assignment asks students to implement a parser for µcomp-lang. The specification of the syntax is available [here](docs/assignment/README-PARSER.md); 
+* **Parsing**: this assignment asks students to implement a parser for µcomp-lang. The specification of the syntax is available [here](mcomp-parsing/README.md); 
 
-* **Semantic analysis**: this assignment mainly concerns the implementation of a static analysis for checking that a given program obeys the scoping rules and the type system of the language. The description of the semantic rules are [here](docs/assignment/README-SEMANTIC.md);
+* **Semantic analysis**: this assignment mainly concerns the implementation of a static analysis for checking that a given program obeys the scoping rules and the type system of the language. The description of the semantic rules are [here](mcomp-semantic-analysis/README.md);
 
 * **Component linking and code generation**: this assignment asks first to link component together according to what specified by the programmer and to use the LLVM toolchain to translate a µcomp-lang program to low level code (LLVM bitcode). 
-The description of the linking rules are available [here](docs/assignment/README-CODEGEN.md); 
+The description of the linking rules are available [here](mcomp-codegen/README.md); 
 
 * **Language extensions**: this assignment asks to extend the µcomp-lang language by considering further constructs. In particular, students are required to implement **at least two** of the following constructs: 
     * `do-while` loops;
