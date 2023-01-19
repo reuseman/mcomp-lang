@@ -103,6 +103,62 @@ end
   By visiting them, it's going to track variables and functions declarations in the given table.
 *)
 module InterfaceVisitor = struct
+  (** 
+    Given a formal parameter of a function and the function symbol table,
+    checks that the type is a valid one and that the parameter is not already defined.
+    @param loc the location of the formal parameter
+    @param function_table the symbol table of the function
+    @param formal the formal parameter to check
+    @return the updated function table
+    @raise Semantic_error if the formal parameter is not valid or already defined
+  *)
+  let visit_formal loc function_table formal =
+    let (identifier, typ) = formal in
+    match typ with
+    (* Forbid parameters with void type ->                             def example(my_par : void, ...) *)
+    | Ast.TVoid ->
+      let err_msg = Printf.sprintf "The parameter '%s' cannot have type 'void'." identifier in
+      let help_msg = "'void' can only be used as a return type of a function." in
+      semantic_error loc err_msg help_msg
+    (* Forbid parameters with arrays of void type ->                   def example(my_par : void[], ...) *)
+    | Ast.TArray(Ast.TVoid, _) ->
+      let err_msg = Printf.sprintf "The parameter '%s' cannot have type 'void[]'." identifier in
+      let help_msg = "'void' can only be used as a return type of a function." in
+      semantic_error loc err_msg help_msg
+    (* Forbid parameter with multi-dimensional arrays of any type ->   def example(my_par : int[][][], ...) *)
+    | Ast.TArray(Ast.TArray(_, _), _) ->
+      let err_msg = Printf.sprintf "The parameter '%s' cannot have a multi-dimensional array type." identifier in
+      let help_msg = "Multi-dimensional arrays are not supported." in
+      semantic_error loc err_msg help_msg
+    (* Forbid parameters with arrays of a fixed size ->                def example(my_par : int[5], ...) *)
+    | Ast.TArray(_, Some(n)) ->
+      let err_msg = Printf.sprintf "The parameter '%s' is a reference to an array with a fixed size." identifier in
+      let help_msg = Printf.sprintf "Size is not needed. Remove the size '%d' in the brackets." n in
+      semantic_error loc err_msg help_msg
+    (* Forbid parameters with a non primitive reference ->             def example(my_par : &void, ...) *)
+    | Ast.TRef(typ, _) when not(Ast.is_primitive typ) ->
+      let err_msg = Printf.sprintf "Variable '%s' cannot be a reference to a non-primitive type." identifier in
+      let help_msg = "References can only be used with primitive types (i.e. int, bool, char)." in
+      semantic_error loc err_msg help_msg
+    (* Forbid parameters with a non primitive reference ->             def example(my_par : &int[], ...) *)
+    | Ast.TArray(Ast.TRef(_), _) -> 
+      let err_msg = Printf.sprintf "Variable '%s' cannot be a reference to an array." identifier in
+      let help_msg = "References can only be used with primitive types (i.e. int, bool, char)." in
+      semantic_error loc err_msg help_msg
+    | _ ->
+      (* Check if already defined in the function parameter list *)
+      begin
+        let info = (identifier, typ, loc) in
+        let value = VarSymbol(info) in
+        try 
+          Symbol_table.add_entry identifier value function_table
+        with
+        | Symbol_table.DuplicateEntry(id) ->
+          let err_msg = Printf.sprintf "The parameter '%s' is declared more than once." id in
+          let help_msg = "Remove the duplicates in the parameters list." in
+          semantic_error loc err_msg help_msg
+      end
+
   (**
     Check that the returned type of the function is a valid one.
     @param rtype The returned type of the function
@@ -173,6 +229,7 @@ module InterfaceVisitor = struct
     | Ast.FunDecl { rtype; fname; formals; _ } ->
       begin
         is_function_return_type_legal rtype fname loc;
+        let _ = List.fold_left (visit_formal loc) (Symbol_table.empty_table ()) formals in
         let parameter_types = List.map snd formals in
         let ftype = Ast.TFun (parameter_types, rtype) in
         let info = (fname, ftype, loc) in
@@ -482,7 +539,7 @@ module ComponentVisitor = struct
       let help_msg = "Remove the duplicates in the provides list." in
       semantic_error loc err_msg help_msg
   
-  
+
   (** 
     Given a formal parameter of a function and the function symbol table,
     checks that the type is a valid one and that the parameter is not already defined.
@@ -555,7 +612,7 @@ module ComponentVisitor = struct
     | Ast.FunDecl {rtype; fname; formals; _} -> 
       begin
         InterfaceVisitor.is_function_return_type_legal rtype fname loc;
-        let function_table = List.fold_left (visit_formal loc) (Symbol_table.empty_table ()) formals in
+        let function_table = List.fold_left (InterfaceVisitor.visit_formal loc) (Symbol_table.empty_table ()) formals in
         let parameter_types = List.map snd formals in
         let parameters_signature = (String.concat ", " (List.map Ast.show_typ parameter_types)) in
         let ftype = Ast.TFun (parameter_types, rtype) in
