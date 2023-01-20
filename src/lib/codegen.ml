@@ -63,7 +63,7 @@ let rec ast_to_llvm = function
   | Ast.TVoid -> void_type
   | Ast.TArray (typ, Some n)  -> L.array_type (ast_to_llvm typ) n
   | Ast.TArray (typ, None)
-  | Ast.TRef (typ, _) -> L.pointer_type (ast_to_llvm typ)
+  | Ast.TRef (typ) -> L.pointer_type (ast_to_llvm typ)
   | Ast.TFun (params_types, rtype) ->
       let ll_rtype = ast_to_llvm rtype in
       let ll_params_types =
@@ -319,7 +319,7 @@ module Codegen = struct
       begin
       let parameter_types = List.map (fun e -> e.annot) exprs in
       (* Mangle the name with parameters' type to support function overloading *)
-      let mangled_fname = Utils.manglify_function ~is_call:true fun_name parameter_types in
+      let mangled_fname = Utils.manglify_function fun_name parameter_types in
       (* Mangle the previous mangled name, with component name to support component scope *)
       let mangled_fname = if fun_name = "main" then fun_name else Utils.manglify_component cname mangled_fname in
 

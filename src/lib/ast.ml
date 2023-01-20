@@ -30,27 +30,12 @@ type typ =
   | TBool                       (* Type bool *)
   | TChar                       (* Type char *)
   | TArray of typ * int option  (* Array type *)
-  | TRef of typ * bool          (* Reference type *)
+  | TRef of typ                 (* Reference type *)
   | TVoid                       (* Type unit *)
   | TFun of typ list * typ      (* Type functions [paramerts] -> return_type *)
   | TInterface of identifier    (* Type of an interface *)
   | TComponent of identifier    (* Type of a component *)
-[@@deriving show, ord]
-
-
-let rec equal_typ t1 t2 = 
-  match t1, t2 with
-  | TInt, TInt -> true
-  | TFloat, TFloat -> true
-  | TBool, TBool -> true
-  | TChar, TChar -> true
-  | TArray (t1, s1), TArray (t2, s2) -> equal_typ t1 t2 && s1 = s2
-  | TRef (t1, _), TRef (t2, _) -> equal_typ t1 t2
-  | TVoid, TVoid -> true
-  | TFun (t1, r1), TFun (t2, r2) -> List.for_all2 equal_typ t1 t2 && equal_typ r1 r2
-  | TInterface i1, TInterface i2 -> i1 = i2
-  | TComponent c1, TComponent c2 -> c1 = c2
-  | _ -> false
+[@@deriving show, ord, eq]
 
 type ('a, 'b) annotated_node = { node : 'a; annot : 'b }
 [@@deriving show, ord, eq]
@@ -189,7 +174,7 @@ let is_primitive = function
 *)
 let rec is_scalar = function
   | TArray _ -> true
-  | TRef (typ, _) -> is_scalar typ
+  | TRef typ -> is_scalar typ
   | _ -> false
 
 (**
@@ -225,7 +210,7 @@ let is_bool_op = function
 *)
 let is_of_typ_or_reftyp oracle_typ to_check =
   match to_check with
-  | TRef (ttyp, _) -> equal_typ oracle_typ ttyp
+  | TRef ttyp -> equal_typ oracle_typ ttyp
   | _ -> equal_typ oracle_typ to_check
 
 (**
@@ -239,7 +224,7 @@ let rec show_typ = function
   | TChar -> "char"
   | TArray (t, None) -> Printf.sprintf "%s[]" (show_typ t)
   | TArray (t, Some n) -> Printf.sprintf "%s[%d]" (show_typ t) n
-  | TRef (t, _) -> Printf.sprintf "ref %s" (show_typ t)
+  | TRef t -> Printf.sprintf "ref %s" (show_typ t)
   | TVoid -> "void"
   | TFun (args, ret) -> Printf.sprintf "(%s) -> %s" (String.concat ", " (List.map show_typ args)) (show_typ ret)
   | TInterface i -> Printf.sprintf "interface %s" i
