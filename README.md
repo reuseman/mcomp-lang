@@ -1,44 +1,90 @@
-# µcomp-lang Compiler
+# µcomp-lang
 
-µcomp-lang is a simple component-based imperative language.
+![mucomp-lang](docs/mucomp-logo.jpg)
 
-The distinguishing features of µcomp-lang are:
-* Programs are built out of components, which are **linked**/**wired** together to form whole programs (separation of construction and composition);
+µcomp-lang is a simple component-based imperative language developed as part of a university project. It offers features such as:
 
-* A component is stateful and is a singleton, i.e., there is **only** an instance of each component, available at the beginning of the execution;
+* Programs are built out of components, which are linked together to form whole programs, promoting separation of construction and composition;
 
-* The specification of component behaviour is given in terms **interfaces**. 
-  Interfaces may be **provided** or **used** by the component. 
-  The provided interfaces are intended to represent the functionality that the component provides to its clients, the used interfaces represent the functionality the component needs to perform its job;
+* A component is stateful and is a singleton, i.e., there is only an instance of each component, available at the beginning of the execution;
 
-* Interfaces specify a set of **functions** and **global variables** to be provided by the interface's provider;
+* The specification of component behavior is given through interfaces. Interfaces may be provided or used by the component. The provided interfaces represent the functionality that the component provides to its clients, while the used interfaces represent the functionality the component needs to perform its job;
+
+* Interfaces specify a set of functions and global variables to be provided by the interface's provider;
 
 * Components are statically linked to each other via their interfaces.
+* To understand better all the remaining features and how to compile and run a µcomp-lang program, please refer to the [documentation](docs/report.pdf).
 
+## Overview
+```c
+  component MyComponent provides App uses Algorithm {
+    def print(a : int[], length : int) : void {
+        var i : int = 0;
+        put('[');
+        for (; i < length; i++) {
+            put(a[i]);
+            if (i < length - 1) {
+                put(',');
+            }
+        }
+        print(']');
+    }
 
-As part of the exam students will be asked to implement a compiler for µcomp-lang using the OCaml language, the tools and the techniques presented during the course. 
-The project is made of four assignments that are released incrementally during the course, so that students can start working on the project before the end of classes (actually, the last assignment is released in the last lecture).
+    def main() : int {
+        var my_arr : int[5];
+        
+        // Unsorted array
+        my_arr[0] = 5;
+        my_arr[1] = 4;
+        my_arr[2] = 3;
+        my_arr[3] = 2;
+        my_arr[4] = 1;
 
-## An introduction to µcomp-lang
+        print(my_arr, 5);
 
-An high-level overview of the language is [here](docs/assignment/OVERVIEW.md).
+        // Search for 2
+        var index : int = search(my_arr, 10, 2);
+        print(index);
+        
+        return 0;
+    }
+}
 
-## Setup your development environment
+connect {
+  MyComponent.Algorithm <- AlgorithmLib.Algorithm;
+}
 
-A description of the provided project kit is [here](docs/assignment/SETUP.md).
+interface Algorithm {
+  def search(a : int[], length: int, key: int) : int;
+}
 
-## µcomp-lang assignments
+component AlgorithmLib provides Algorithm {
+  def search(a : int[], length: int, key: int) : int {
+    var i : int = 0;
+    for (; i < length; i++) {
+      if (a[i] == key) {
+        return i;
+      }
+    }
+    return -1;
+  }
+}
 
+```
+
+## Setup 
+A development environment is provided with a detailed description in [here](docs/assignment/SETUP.md)
+
+## Assignments
 The project is split in the following assignments:
 
-* **Parsing**: this assignment asks students to implement a parser for µcomp-lang. The specification of the syntax is available [here](docs/assignment/README-PARSER.md); 
+* **Parsing**: Implement a parser for µcomp-lang using the specifications provided [here](docs/assignment/README-PARSER.md); 
 
-* **Semantic analysis**: this assignment mainly concerns the implementation of a static analysis for checking that a given program obeys the scoping rules and the type system of the language. The description of the semantic rules are [here](docs/assignment/README-SEMANTIC.md);
+* **Semantic analysis**: Implement a static analysis for checking that a given program obeys the scoping rules and the type system of the language, using the description of semantic rules provided [here](docs/assignment/README-SEMANTIC.md);
 
-* **Component linking and code generation**: this assignment asks first to link component together according to what specified by the programmer and to use the LLVM toolchain to translate a µcomp-lang program to low level code (LLVM bitcode). 
-The description of the linking rules are available [here](docs/assignment/README-CODEGEN.md); 
+* **Component linking and code generation**: Link components together according to what is specified by the programmer and use the LLVM toolchain to translate a µcomp-lang program to low-level code (LLVM bitcode). The description of linking rules can be found [here](docs/assignment/README-CODEGEN.md); 
 
-* **Language extensions**: this assignment asks to extend the µcomp-lang language by considering further constructs. In particular, students are required to implement **at least two** of the following constructs: 
+* **Language extensions**: Extend the µcomp-lang language by implementing at least two of the following constructs: 
     * `do-while` loops;
     * pre/post increment/decrement operators, i.e., `++` and `--`;
     * abbreviation for assignment operators, i.e., `+=`, `-=`, `*=`, `/=` and `%=`;
@@ -50,4 +96,4 @@ The description of the linking rules are available [here](docs/assignment/README
     * interfaces that can use other interfaces;
     * overloading of functions. 
 
-To take the exam students must submit their solution, i.e., their OCaml code, the documentation of the code, and a report describing the design and the implementation choices adopted.  
+As part of the project submission, students are required to submit their code, documentation, and a report describing the design and implementation choices.
