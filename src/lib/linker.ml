@@ -363,8 +363,6 @@ module Qualifier = struct
           Ast.Call (Some(current_cname), i2, ve)
       | Ast.Call (Some interface, i2, exprs) ->
           (* Add qualifier *)
-          print_endline "=============LINK================";
-          print_endline ("interface: " ^ interface ^ " current_cname: " ^ current_cname ^ " i2: " ^ i2);
           let component =
             if interface = "Prelude" then "Prelude"
             else if interface = current_cname then current_cname
