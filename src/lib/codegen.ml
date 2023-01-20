@@ -423,7 +423,7 @@ module Codegen = struct
           array_ptr
       | Ast.TRef(_)
       | Ast.TArray(_, None) ->
-        (* Arrays without are dereferenced like pointer to a contiguos memory area. *)
+        (* Arrays without size are dereferenced like pointer to a contiguos memory area. *)
         let array_ptr = L.build_load variable_sym "array_ptr_unbound" fun_ctx.ll_builder in
         let address = L.build_in_bounds_gep array_ptr [| g_index |] "array_ptr_inbound" fun_ctx.ll_builder in
         if load_value then
@@ -570,7 +570,7 @@ module Codegen = struct
          it stops the codegen. *)
       List.for_all continue_codegen stmtordec
 
-    | Ast.Skip -> false
+    | Ast.Skip -> true
 
   
   (**
