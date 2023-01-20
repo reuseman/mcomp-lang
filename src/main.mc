@@ -13,7 +13,7 @@ component MyComponent provides App uses Algorithm {
 
     def main() : int {
         var my_arr : int[10];
-
+        
         // Unsorted array
         my_arr[0] = 10;
         my_arr[1] = 9;
