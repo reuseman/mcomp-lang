@@ -363,6 +363,8 @@ module Qualifier = struct
           Ast.Call (Some(current_cname), i2, ve)
       | Ast.Call (Some interface, i2, exprs) ->
           (* Add qualifier *)
+          print_endline "=============LINK================";
+          print_endline ("interface: " ^ interface ^ " current_cname: " ^ current_cname ^ " i2: " ^ i2);
           let component =
             if interface = "Prelude" then "Prelude"
             else if interface = current_cname then current_cname
@@ -422,6 +424,10 @@ module Qualifier = struct
 
   and visit_stmtordec current_cname table stmtordec =
     match stmtordec.node with
+    | Ast.LocalDecl((id, typ), Some(expr)) ->
+        let new_expr = visit_expr current_cname table expr in
+        Ast.LocalDecl((id, typ), Some(new_expr))
+        ++ stmtordec.annot
     | Ast.LocalDecl _ -> stmtordec
     | Ast.Stmt s -> Ast.Stmt (visit_stmt current_cname table s) ++ stmtordec.annot
 
@@ -431,6 +437,10 @@ module Qualifier = struct
       | Ast.FunDecl { rtype; fname; formals; body = Some stmt } ->
           let new_stmt = visit_stmt current_cname table stmt in
           Ast.FunDecl { rtype; fname; formals; body = Some new_stmt }
+          ++ definition.annot
+      | Ast.VarDecl((id, typ), Some(expr)) ->
+          let new_expr = visit_expr current_cname table expr in
+          Ast.VarDecl((id, typ), Some(new_expr))
           ++ definition.annot
       | _ -> definition
     in
